@@ -12,7 +12,9 @@ jest.mock('react-native-reanimated', () => {
 
 jest.mock('@react-native-community/geolocation', () => ({
   setRNConfiguration: jest.fn(),
-  getCurrentPosition: jest.fn(),
+  getCurrentPosition: jest.fn((success, error) =>
+    error?.({ message: 'Location unavailable in tests' }),
+  ),
 }));
 
 jest.mock('lucide-react-native', () => {

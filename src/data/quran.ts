@@ -1,3 +1,14 @@
+import quranBengali from 'quran-json/dist/quran_bn.json';
+import quranChinese from 'quran-json/dist/quran_zh.json';
+import quranEnglish from 'quran-json/dist/quran_en.json';
+import quranFrench from 'quran-json/dist/quran_fr.json';
+import quranIndonesian from 'quran-json/dist/quran_id.json';
+import quranRussian from 'quran-json/dist/quran_ru.json';
+import quranSpanish from 'quran-json/dist/quran_es.json';
+import quranSwedish from 'quran-json/dist/quran_sv.json';
+import quranTurkish from 'quran-json/dist/quran_tr.json';
+import quranUrdu from 'quran-json/dist/quran_ur.json';
+
 export type Ayah = {
   number: string;
   arabic: string;
@@ -10,115 +21,105 @@ export type Surah = {
   meaning: string;
   arabicName: string;
   verseCount: string;
+  revelationType: 'Meccan' | 'Medinan';
   ayahs: Ayah[];
 };
 
-export const surahs: Surah[] = [
+type QuranVerseJSON = {
+  id: number;
+  text: string;
+  translation: string;
+};
+
+type QuranChapterJSON = {
+  id: number;
+  name: string;
+  transliteration: string;
+  translation: string;
+  type: 'meccan' | 'medinan';
+  total_verses: number;
+  verses: QuranVerseJSON[];
+};
+
+export const quranLanguageOptions = [
+  { code: 'en', label: 'English', translator: 'Saheeh International' },
+  { code: 'bn', label: 'Bengali', translator: 'Muhiuddin Khan' },
+  { code: 'zh', label: 'Chinese', translator: 'Muhammad Makin' },
+  { code: 'es', label: 'Spanish', translator: 'Muhammad Isa García' },
+  { code: 'fr', label: 'French', translator: 'Muhammad Hamidullah' },
   {
-    number: '1',
-    name: 'Al-Fatihah',
-    meaning: 'The Opening',
-    arabicName: 'الفاتحة',
-    verseCount: '7',
-    ayahs: [
-      {
-        number: '١',
-        arabic: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
-        translation:
-          'In the name of Allah, the Most Compassionate, Most Merciful.',
-      },
-      {
-        number: '٢',
-        arabic: 'الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ',
-        translation: 'All praise is for Allah—Lord of all worlds.',
-      },
-      {
-        number: '٣',
-        arabic: 'الرَّحْمَٰنِ الرَّحِيمِ',
-        translation: 'The Most Compassionate, Most Merciful.',
-      },
-    ],
+    code: 'id',
+    label: 'Indonesian',
+    translator: 'Indonesian Ministry of Religious Affairs',
   },
+  { code: 'ru', label: 'Russian', translator: 'Elmir Kuliev' },
+  { code: 'sv', label: 'Swedish', translator: 'Knut Bernström' },
   {
-    number: '2',
-    name: 'Al-Baqarah',
-    meaning: 'The Cow',
-    arabicName: 'البقرة',
-    verseCount: '286',
-    ayahs: [
-      { number: '١', arabic: 'الم', translation: 'Alif-Lãm-Mĩm.' },
-      {
-        number: '٢',
-        arabic: 'ذَٰلِكَ الْكِتَابُ لَا رَيْبَ فِيهِ هُدًى لِّلْمُتَّقِينَ',
-        translation:
-          'This is the Book! There is no doubt about it—a guide for those mindful of Allah.',
-      },
-      {
-        number: '٢٥٥',
-        arabic: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ',
-        translation:
-          'Allah! There is no god worthy of worship except Him, the Ever-Living, All-Sustaining.',
-      },
-    ],
+    code: 'tr',
+    label: 'Turkish',
+    translator: 'Directorate of Religious Affairs',
   },
-  {
-    number: '3',
-    name: 'Ali ‘Imran',
-    meaning: 'Family of Imran',
-    arabicName: 'آل عمران',
-    verseCount: '200',
-    ayahs: [
-      { number: '١', arabic: 'الم', translation: 'Alif-Lãm-Mĩm.' },
-      {
-        number: '٢',
-        arabic: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ',
-        translation:
-          'Allah! There is no god worthy of worship except Him—the Ever-Living, All-Sustaining.',
-      },
-    ],
-  },
-  {
-    number: '4',
-    name: 'An-Nisa',
-    meaning: 'The Women',
-    arabicName: 'النساء',
-    verseCount: '176',
-    ayahs: [
-      {
-        number: '١',
-        arabic: 'يَا أَيُّهَا النَّاسُ اتَّقُوا رَبَّكُمُ',
-        translation:
-          'O humanity! Be mindful of your Lord Who created you from a single soul.',
-      },
-    ],
-  },
-  {
-    number: '5',
-    name: 'Al-Ma’idah',
-    meaning: 'The Table Spread',
-    arabicName: 'المائدة',
-    verseCount: '120',
-    ayahs: [
-      {
-        number: '١',
-        arabic: 'يَا أَيُّهَا الَّذِينَ آمَنُوا أَوْفُوا بِالْعُقُودِ',
-        translation: 'O believers! Honour your obligations.',
-      },
-    ],
-  },
-  {
-    number: '6',
-    name: 'Al-An’am',
-    meaning: 'The Cattle',
-    arabicName: 'الأنعام',
-    verseCount: '165',
-    ayahs: [
-      {
-        number: '١',
-        arabic: 'الْحَمْدُ لِلَّهِ الَّذِي خَلَقَ السَّمَاوَاتِ وَالْأَرْضَ',
-        translation:
-          'All praise is for Allah Who created the heavens and the earth.',
-      },
-    ],
-  },
-];
+  { code: 'ur', label: 'Urdu', translator: "Abul A'la Maududi" },
+] as const;
+
+export type QuranLanguageCode = (typeof quranLanguageOptions)[number]['code'];
+
+export const quranReadingTraditions = [
+  { key: 'hafs', label: 'Hafs ‘an ‘Asim', available: true },
+  { key: 'shubah', label: 'Shu‘bah ‘an ‘Asim', available: false },
+  { key: 'warsh', label: 'Warsh ‘an Nafi‘', available: false },
+  { key: 'qalun', label: 'Qalun ‘an Nafi‘', available: false },
+  { key: 'duri_abu_amr', label: 'Al-Duri ‘an Abi ‘Amr', available: false },
+  { key: 'susi', label: 'Al-Susi ‘an Abi ‘Amr', available: false },
+  { key: 'bazzi', label: 'Al-Bazzi ‘an Ibn Kathir', available: false },
+  { key: 'qunbul', label: 'Qunbul ‘an Ibn Kathir', available: false },
+  { key: 'hisham', label: 'Hisham ‘an Ibn ‘Amir', available: false },
+  { key: 'ibn_dhakwan', label: 'Ibn Dhakwan ‘an Ibn ‘Amir', available: false },
+] as const;
+
+const quranEditions: Record<QuranLanguageCode, QuranChapterJSON[]> = {
+  bn: quranBengali as QuranChapterJSON[],
+  zh: quranChinese as QuranChapterJSON[],
+  en: quranEnglish as QuranChapterJSON[],
+  es: quranSpanish as QuranChapterJSON[],
+  fr: quranFrench as QuranChapterJSON[],
+  id: quranIndonesian as QuranChapterJSON[],
+  ru: quranRussian as QuranChapterJSON[],
+  sv: quranSwedish as QuranChapterJSON[],
+  tr: quranTurkish as QuranChapterJSON[],
+  ur: quranUrdu as QuranChapterJSON[],
+};
+
+function buildSurahs(edition: QuranChapterJSON[]): Surah[] {
+  return edition.map(chapter => ({
+    number: String(chapter.id),
+    name: chapter.transliteration,
+    meaning: chapter.translation,
+    arabicName: chapter.name,
+    verseCount: String(chapter.total_verses),
+    revelationType: chapter.type === 'meccan' ? 'Meccan' : 'Medinan',
+    ayahs: chapter.verses.map(verse => ({
+      number: String(verse.id),
+      arabic: verse.text,
+      translation: verse.translation,
+    })),
+  }));
+}
+
+const editions = Object.fromEntries(
+  Object.entries(quranEditions).map(([code, edition]) => [
+    code,
+    buildSurahs(edition),
+  ]),
+) as Record<QuranLanguageCode, Surah[]>;
+
+export const surahs = editions.en;
+
+export function getSurahs(language: QuranLanguageCode = 'en') {
+  return editions[language] ?? editions.en;
+}
+
+export const totalAyahCount = surahs.reduce(
+  (total, surah) => total + surah.ayahs.length,
+  0,
+);

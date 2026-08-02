@@ -8,8 +8,6 @@ import React, {
 import {
   ActivityIndicator,
   Keyboard,
-  PermissionsAndroid,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -17,10 +15,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Geolocation from '@react-native-community/geolocation';
 import MapView, { Marker, Region } from 'react-native-maps';
 import {
   ChevronRight,
+  Home,
   LocateFixed,
   MapPin,
   Navigation,
@@ -33,15 +31,23 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
+import { useSelectedMosque } from '../components/SelectedMosqueContext';
 import {
   CALGARY_CENTRE,
-  Coordinates,
   distanceKm,
   fallbackNearbyMosques,
+  fetchMosquesInRegion,
   fetchNearbyMosques,
   geocodeCanadianPostalCode,
-  Mosque,
+  searchMosquesByName,
 } from '../services/mosques';
+import type { Coordinates, Mosque } from '../services/mosques';
+import { getCurrentCoordinates } from '../services/location';
+import {
+  readLastMosqueSearch,
+  saveLastMosqueSearch,
+} from '../services/mosqueSearchCache';
+import type { CachedSearchedLocation } from '../services/mosqueSearchCache';
 
 const INITIAL_REGION: Region = {
   ...CALGARY_CENTRE,
@@ -49,55 +55,37 @@ const INITIAL_REGION: Region = {
   longitudeDelta: 0.42,
 };
 
-Geolocation.setRNConfiguration({
-  skipPermissionRequests: false,
-  authorizationLevel: 'whenInUse',
-  locationProvider: 'auto',
-});
-
-async function currentLocation(): Promise<Coordinates> {
-  if (Platform.OS === 'android') {
-    const result = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      {
-        title: 'Find nearby mosques',
-        message:
-          'Sakinah uses your location only to show and sort nearby mosques.',
-        buttonPositive: 'Allow',
-        buttonNegative: 'Not now',
-      },
-    );
-    if (result !== PermissionsAndroid.RESULTS.GRANTED)
-      throw new Error('Location permission was not granted.');
-  }
-  return new Promise((resolve, reject) =>
-    Geolocation.getCurrentPosition(
-      position =>
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        }),
-      reject,
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
-    ),
-  );
-}
-
 function normalizedPostalCode(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 function isCanadianPostalCode(value: string) {
-  return /^[ABCEGHJKLMNPRSTVXY]\d[ABCEGHJKLMNPRSTVWXYZ](?:\d[ABCEGHJKLMNPRSTVWXYZ]\d)?$/.test(
+  return /^[ABCEGHJKLMNPRSTVXY]\d[ABCEGHJKLMNPRSTVWXYZ]\d[ABCEGHJKLMNPRSTVWXYZ]\d$/.test(
     normalizedPostalCode(value),
   );
 }
 
+function formatPostalCodeInput(value: string) {
+  const normalized = normalizedPostalCode(value).slice(0, 6);
+  return normalized.length > 3
+    ? `${normalized.slice(0, 3)} ${normalized.slice(3)}`
+    : normalized;
+}
+
+type LoadForOriginOptions = {
+  background?: boolean;
+  cacheLabel?: string;
+  searchedLocation?: CachedSearchedLocation;
+};
+
 export default function MosqueFinderScreen({ navigation }: any) {
   const { palette, isDark } = useAppTheme();
   const theme = useThemeStyles();
+  const { selectMosque } = useSelectedMosque();
   const mapRef = useRef<MapView>(null);
   const mapReadyRef = useRef(false);
+  const mapOriginRef = useRef<Coordinates>(CALGARY_CENTRE);
+  const loadRequestRef = useRef(0);
   const [query, setQuery] = useState('');
   const [mosques, setMosques] = useState<Mosque[]>([]);
   const [selectedMosque, setSelectedMosque] = useState<Mosque | null>(null);
@@ -108,7 +96,10 @@ export default function MosqueFinderScreen({ navigation }: any) {
   const [searchError, setSearchError] = useState('');
   const [showsUserLocation, setShowsUserLocation] = useState(false);
   const [mapMoved, setMapMoved] = useState(false);
+  const [showAllSearchResults, setShowAllSearchResults] = useState(false);
   const [visibleRegion, setVisibleRegion] = useState<Region>(INITIAL_REGION);
+  const [searchedLocation, setSearchedLocation] =
+    useState<CachedSearchedLocation | null>(null);
 
   const focusMap = useCallback((origin: Coordinates, items: Mosque[]) => {
     if (!mapReadyRef.current) return;
@@ -127,7 +118,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
         });
       } else {
         mapRef.current?.animateToRegion(
-          { ...origin, latitudeDelta: 0.18, longitudeDelta: 0.18 },
+          { ...origin, latitudeDelta: 0.055, longitudeDelta: 0.055 },
           450,
         );
       }
@@ -139,8 +130,12 @@ export default function MosqueFinderScreen({ navigation }: any) {
       origin: Coordinates,
       successMessage: string,
       radiusMeters = 30000,
+      focusClosestOnly = false,
+      options: LoadForOriginOptions = {},
     ) => {
-      setLoading(true);
+      const requestId = ++loadRequestRef.current;
+      mapOriginRef.current = origin;
+      if (!options.background) setLoading(true);
       setSearchError('');
       setMapMoved(false);
       let liveMosques: Mosque[] = [];
@@ -155,40 +150,119 @@ export default function MosqueFinderScreen({ navigation }: any) {
           ? fallbackNearbyMosques(origin)
           : [];
       const nextMosques = liveMosques.length ? liveMosques : fallback;
-      setMosques(nextMosques);
-      setSelectedMosque(nextMosques[0] ?? null);
 
-      if (liveMosques.length) setMessage(successMessage);
+      if (requestId !== loadRequestRef.current) return;
+      if (options.background && !nextMosques.length) {
+        setMessage(
+          `Showing saved ${
+            options.cacheLabel ?? 'area'
+          } mosques · refresh unavailable`,
+        );
+        return;
+      }
+
+      setMosques(nextMosques);
+      const closestMosque = nextMosques[0] ?? null;
+      setSelectedMosque(closestMosque);
+      if (closestMosque) selectMosque(closestMosque);
+
+      if (options.cacheLabel && nextMosques.length) {
+        saveLastMosqueSearch({
+          origin,
+          label: options.cacheLabel,
+          mosques: nextMosques,
+          searchedLocation: options.searchedLocation,
+          radiusMeters,
+        }).catch(() => undefined);
+      }
+
+      if (liveMosques.length)
+        setMessage(
+          `${successMessage}${
+            liveMosques[0]?.source === 'apple' ? ' · Apple Maps' : ''
+          }`,
+        );
       else if (fallback.length)
         setMessage('Showing saved Calgary mosques · tap location to recenter');
       else if (searchFailed)
         setMessage('Mosque search is unavailable. Check your connection.');
       else setMessage('No mapped mosques found in this area.');
-      setLoading(false);
-      focusMap(origin, nextMosques);
+      if (!options.background) setLoading(false);
+      focusMap(
+        origin,
+        focusClosestOnly ? nextMosques.slice(0, 1) : nextMosques,
+      );
     },
-    [focusMap],
+    [focusMap, selectMosque],
   );
 
   useEffect(() => {
-    loadForOrigin(
-      CALGARY_CENTRE,
-      'Calgary area · tap the location icon to show where you are',
-    );
-  }, [loadForOrigin]);
+    let active = true;
+
+    const restoreLastSearch = async () => {
+      const cached = await readLastMosqueSearch();
+      if (!active) return;
+
+      if (cached?.mosques.length) {
+        const closestMosque = cached.mosques[0];
+        mapOriginRef.current = cached.origin;
+        setMosques(cached.mosques);
+        setSelectedMosque(closestMosque);
+        selectMosque(closestMosque);
+        setSearchedLocation(cached.searchedLocation ?? null);
+        setQuery(cached.searchedLocation?.label ?? '');
+        setShowAllSearchResults(Boolean(cached.searchedLocation));
+        setLoading(false);
+        setMessage(`Showing saved ${cached.label} mosques · refreshing…`);
+        focusMap(cached.origin, cached.mosques.slice(0, 1));
+        loadForOrigin(
+          cached.origin,
+          `${cached.label} · closest masjid selected`,
+          cached.radiusMeters,
+          true,
+          {
+            background: true,
+            cacheLabel: cached.label,
+            searchedLocation: cached.searchedLocation,
+          },
+        );
+        return;
+      }
+
+      loadForOrigin(
+        CALGARY_CENTRE,
+        'Calgary area · closest masjid selected',
+        30000,
+        true,
+        { cacheLabel: 'Calgary' },
+      );
+    };
+
+    restoreLastSearch();
+    return () => {
+      active = false;
+      loadRequestRef.current += 1;
+    };
+  }, [focusMap, loadForOrigin, selectMosque]);
 
   const locateMe = async () => {
     Keyboard.dismiss();
+    loadRequestRef.current += 1;
     setLoading(true);
     setSearchError('');
     setMessage('Finding your location…');
     try {
-      const origin = await currentLocation();
+      const origin = await getCurrentCoordinates();
       setShowsUserLocation(true);
+      setSearchedLocation(null);
       setQuery('');
+      setShowAllSearchResults(false);
       await loadForOrigin(
         origin,
-        'Your location · nearby masjids shown on the map',
+        'Your location · closest masjid selected',
+        30000,
+        true,
+        { cacheLabel: 'your last location' },
       );
     } catch {
       setShowsUserLocation(false);
@@ -203,11 +277,11 @@ export default function MosqueFinderScreen({ navigation }: any) {
   const results = useMemo(() => {
     const value = query.trim().toLowerCase();
     const looksPostal = /^[a-z]\d/i.test(normalizedPostalCode(query));
-    if (!value || looksPostal) return mosques;
+    if (!value || looksPostal || showAllSearchResults) return mosques;
     return mosques.filter(mosque =>
       `${mosque.name} ${mosque.address}`.toLowerCase().includes(value),
     );
-  }, [mosques, query]);
+  }, [mosques, query, showAllSearchResults]);
 
   useEffect(() => {
     if (
@@ -221,21 +295,37 @@ export default function MosqueFinderScreen({ navigation }: any) {
   const submitSearch = async () => {
     Keyboard.dismiss();
     if (!query.trim()) {
-      focusMap(CALGARY_CENTRE, mosques);
+      focusMap(mapOriginRef.current, mosques.slice(0, 1));
       return;
     }
     if (isCanadianPostalCode(query)) {
+      loadRequestRef.current += 1;
       setLoading(true);
       setSearchError('');
       setMessage('Finding your postal-code area…');
       try {
         const area = await geocodeCanadianPostalCode(query);
-        setQuery('');
+        const postalLocation: CachedSearchedLocation = {
+          coordinates: area.coordinates,
+          label: area.postalArea,
+          address: area.address,
+        };
+        setQuery(area.postalArea);
+        setShowsUserLocation(false);
+        setSearchedLocation(postalLocation);
         await loadForOrigin(
           area.coordinates,
           `${area.postalArea} · ${area.city}${
             area.province ? `, ${area.province}` : ''
-          }`,
+          } · closest masjid and postal location in view`,
+          30000,
+          true,
+          {
+            cacheLabel: `${area.city}${
+              area.province ? `, ${area.province}` : ''
+            }`,
+            searchedLocation: postalLocation,
+          },
         );
       } catch (error) {
         setSearchError(
@@ -252,36 +342,103 @@ export default function MosqueFinderScreen({ navigation }: any) {
       return;
     }
     setSearchError('');
-    if (results.length) {
-      setSelectedMosque(results[0]);
+    setLoading(true);
+    setMessage(`Searching Apple Maps for “${query.trim()}”…`);
+    const requestId = ++loadRequestRef.current;
+    try {
+      const namedMosques = await searchMosquesByName(query.trim(), {
+        latitude: visibleRegion.latitude,
+        longitude: visibleRegion.longitude,
+      });
+      if (requestId !== loadRequestRef.current) return;
+      if (!namedMosques.length) {
+        setSearchError(`No Apple Maps result found for “${query.trim()}”.`);
+        setMessage('Try the mosque’s full name or move the map closer');
+        return;
+      }
+      const firstMatch = namedMosques[0];
+      mapOriginRef.current = {
+        latitude: firstMatch.latitude,
+        longitude: firstMatch.longitude,
+      };
+      setMosques(namedMosques);
+      setSelectedMosque(firstMatch);
+      selectMosque(firstMatch);
+      setQuery(firstMatch.name);
+      setShowAllSearchResults(true);
+      setSearchedLocation(null);
+      setMessage(`Apple Maps result · ${firstMatch.name}`);
       focusMap(
         {
-          latitude: results[0].latitude,
-          longitude: results[0].longitude,
+          latitude: firstMatch.latitude,
+          longitude: firstMatch.longitude,
         },
-        results,
+        [],
       );
+    } catch {
+      if (requestId !== loadRequestRef.current) return;
+      setSearchError('Apple Maps search is temporarily unavailable.');
+      setMessage('Check your connection and try again');
+    } finally {
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   };
 
   const searchVisibleArea = () => {
-    const radiusMeters = Math.min(
-      50000,
-      Math.max(10000, visibleRegion.latitudeDelta * 111000 * 0.55),
-    );
-    loadForOrigin(
-      {
-        latitude: visibleRegion.latitude,
-        longitude: visibleRegion.longitude,
-      },
-      'Showing masjids in this map area',
-      radiusMeters,
-    );
+    const requestId = ++loadRequestRef.current;
+    const mapOrigin = {
+      latitude: visibleRegion.latitude,
+      longitude: visibleRegion.longitude,
+    };
+    mapOriginRef.current = mapOrigin;
+    setSearchedLocation(null);
+    setQuery('');
+    setShowAllSearchResults(false);
+    setSearchError('');
+    setLoading(true);
+    setMapMoved(false);
+    setMessage('Searching Apple Maps and the global mosque directory…');
+    fetchMosquesInRegion(visibleRegion)
+      .then(nextMosques => {
+        if (requestId !== loadRequestRef.current) return;
+        setMosques(nextMosques);
+        const closestMosque = nextMosques[0] ?? null;
+        setSelectedMosque(closestMosque);
+        if (closestMosque) selectMosque(closestMosque);
+        if (nextMosques.length) {
+          saveLastMosqueSearch({
+            origin: mapOrigin,
+            label: 'last map area',
+            mosques: nextMosques,
+            radiusMeters: 30000,
+          }).catch(() => undefined);
+        }
+        setMessage(
+          nextMosques.length
+            ? `Showing ${nextMosques.length} masjid${
+                nextMosques.length === 1 ? '' : 's'
+              } in this map area`
+            : 'No mapped masjids found in this area.',
+        );
+      })
+      .catch(error => {
+        if (requestId !== loadRequestRef.current) return;
+        setSearchError(
+          error instanceof Error
+            ? error.message
+            : 'Mosque search is temporarily unavailable.',
+        );
+      })
+      .finally(() => {
+        if (requestId === loadRequestRef.current) setLoading(false);
+      });
   };
 
   const activeMosque = selectedMosque ?? results[0] ?? null;
-  const openMosque = (mosque: Mosque) =>
+  const openMosque = (mosque: Mosque) => {
+    selectMosque(mosque);
     navigation.navigate('MosqueDetail', { mosque });
+  };
 
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
@@ -292,7 +449,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
         mapPadding={{ top: 145, right: 20, bottom: 220, left: 20 }}
         onMapReady={() => {
           mapReadyRef.current = true;
-          focusMap(CALGARY_CENTRE, mosques);
+          focusMap(mapOriginRef.current, mosques.slice(0, 1));
         }}
         onPanDrag={() => setMapMoved(true)}
         onRegionChangeComplete={setVisibleRegion}
@@ -305,7 +462,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
         style={StyleSheet.absoluteFill}
         userInterfaceStyle={isDark ? 'dark' : 'light'}
       >
-        {results.map((mosque, index) => (
+        {results.map(mosque => (
           <Marker
             accessibilityLabel={`${mosque.name}, ${mosque.distanceKm.toFixed(
               1,
@@ -318,12 +475,37 @@ export default function MosqueFinderScreen({ navigation }: any) {
               mosque.address
             }`}
             key={mosque.id}
-            onPress={() => setSelectedMosque(mosque)}
-            pinColor={index === 0 ? palette.gold : palette.green}
+            onPress={() => {
+              setSelectedMosque(mosque);
+              selectMosque(mosque);
+            }}
+            pinColor={
+              selectedMosque?.id === mosque.id ? palette.gold : palette.green
+            }
             title={mosque.name}
             zIndex={selectedMosque?.id === mosque.id ? 2 : 1}
           />
         ))}
+        {searchedLocation ? (
+          <Marker
+            accessibilityLabel={`Postal-code location ${searchedLocation.label}`}
+            anchor={{ x: 0.5, y: 0.5 }}
+            coordinate={searchedLocation.coordinates}
+            description={searchedLocation.address}
+            title={`Postal location · ${searchedLocation.label}`}
+            tracksViewChanges={false}
+            zIndex={4}
+          >
+            <View
+              style={[
+                styles.homeMarker,
+                { backgroundColor: palette.gold, borderColor: colors.white },
+              ]}
+            >
+              <Home size={16} color={colors.white} strokeWidth={2.6} />
+            </View>
+          </Marker>
+        ) : null}
       </MapView>
 
       <View pointerEvents="box-none" style={styles.topOverlay}>
@@ -331,7 +513,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
           <View>
             <Text style={[styles.title, theme.text]}>Mosques</Text>
             <Text style={[styles.subtitle, theme.mutedText]}>
-              Explore masjids near you
+              Explore masjids worldwide
             </Text>
           </View>
           <View style={[styles.countBadge, theme.card]}>
@@ -343,15 +525,21 @@ export default function MosqueFinderScreen({ navigation }: any) {
         <View style={[styles.searchBar, theme.card]}>
           <Search size={19} color={palette.muted} />
           <TextInput
-            accessibilityLabel="Search mosque name or Canadian postal code"
+            accessibilityLabel="Search mosque name, city, or postal code worldwide"
             autoCapitalize="words"
             autoCorrect={false}
             onChangeText={value => {
-              setQuery(value);
+              const normalized = normalizedPostalCode(value);
+              setShowAllSearchResults(false);
+              setQuery(
+                /^[a-z]\d/i.test(normalized)
+                  ? formatPostalCodeInput(value)
+                  : value,
+              );
               if (searchError) setSearchError('');
             }}
             onSubmitEditing={submitSearch}
-            placeholder="Mosque name or postal code"
+            placeholder="Mosque, city, or postal code"
             placeholderTextColor={palette.muted}
             returnKeyType="search"
             style={[styles.input, theme.text]}
@@ -364,6 +552,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
               hitSlop={8}
               onPress={() => {
                 setQuery('');
+                setShowAllSearchResults(false);
                 setSearchError('');
               }}
             >
@@ -474,7 +663,14 @@ export default function MosqueFinderScreen({ navigation }: any) {
       )}
 
       <Text style={[styles.attribution, theme.mutedText]}>
-        Mosque data © OpenStreetMap contributors
+        {mosques.some(mosque => mosque.source === 'apple') &&
+        mosques.some(mosque => mosque.source === 'openstreetmap')
+          ? 'Results from Apple Maps + OpenStreetMap'
+          : mosques[0]?.source === 'apple'
+          ? 'Mosque results from Apple Maps'
+          : mosques[0]?.source === 'saved'
+          ? 'Saved mosque directory'
+          : 'Mosque data © OpenStreetMap contributors'}
       </Text>
     </SafeAreaView>
   );
@@ -577,6 +773,19 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   searchAreaText: { color: colors.green, fontSize: 11, fontWeight: '800' },
+  homeMarker: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 6,
+  },
   mosqueCard: {
     ...shared.card,
     position: 'absolute',

@@ -34,7 +34,7 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Sakinah uses your location to find and sort nearby mosques.</string>
+	<string>Sakinah uses your location to calculate local prayer times and find nearby mosques.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

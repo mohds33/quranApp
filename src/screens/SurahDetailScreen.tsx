@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Bookmark, Pause, Play } from 'lucide-react-native';
 import {
@@ -8,13 +8,26 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import { surahs } from '../data/quran';
+import {
+  Ayah,
+  getSurahs,
+  quranLanguageOptions,
+} from '../data/quran';
+import { useAppPreferences } from '../components/AppPreferencesContext';
 
 export default function SurahDetailScreen({ navigation, route }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
+  const { preferences } = useAppPreferences();
+  const localizedSurahs = getSurahs(preferences.quranLanguage);
+  const language =
+    quranLanguageOptions.find(
+      option => option.code === preferences.quranLanguage,
+    ) ?? quranLanguageOptions[0];
   const surah =
-    surahs.find(item => item.number === route.params?.surahNumber) ?? surahs[0];
+    localizedSurahs.find(
+      item => item.number === route.params?.surahNumber,
+    ) ?? localizedSurahs[0];
   const [playing, setPlaying] = useState(false);
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const toggleBookmark = (number: string) =>
@@ -24,83 +37,107 @@ export default function SurahDetailScreen({ navigation, route }: any) {
         : [...items, number],
     );
 
-  return (
-    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
-      <ScrollView contentContainerStyle={shared.content}>
-        <View style={styles.top}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to Quran"
-            onPress={() => navigation.goBack()}
-            style={[styles.button, theme.card]}
-          >
-            <ArrowLeft size={20} color={palette.ink} />
-          </Pressable>
-          <View style={styles.heading}>
-            <Text style={[styles.title, theme.text]}>{surah.name}</Text>
-            <Text style={[styles.subtitle, theme.mutedText]}>
-              {surah.meaning} · {surah.verseCount} verses
+  const renderAyah = ({ item: ayah }: { item: Ayah }) => {
+    const saved = bookmarks.includes(ayah.number);
+    return (
+      <View style={[styles.ayah, theme.card]}>
+        <View style={styles.ayahTop}>
+          <View style={[styles.number, { backgroundColor: palette.mint }]}>
+            <Text style={[styles.numberText, { color: palette.green }]}>
+              {ayah.number}
             </Text>
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              playing ? 'Pause recitation' : 'Play recitation'
+              saved
+                ? `Remove verse ${ayah.number} bookmark`
+                : `Bookmark verse ${ayah.number}`
             }
-            onPress={() => setPlaying(value => !value)}
-            style={[styles.button, theme.card, playing && styles.buttonActive]}
+            onPress={() => toggleBookmark(ayah.number)}
           >
-            {playing ? (
-              <Pause size={19} fill={colors.white} color={colors.white} />
-            ) : (
-              <Play size={19} color={palette.green} />
-            )}
+            <Bookmark
+              size={19}
+              color={palette.gold}
+              fill={saved ? palette.gold : 'transparent'}
+            />
           </Pressable>
         </View>
-        <View style={styles.bismillah}>
-          <Text style={styles.bismillahArabic}>
-            بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ
-          </Text>
-          {playing ? (
-            <Text style={styles.playing}>RECITATION PLAYING</Text>
-          ) : null}
-        </View>
-        {surah.ayahs.map(ayah => {
-          const saved = bookmarks.includes(ayah.number);
-          return (
-            <View key={ayah.number} style={[styles.ayah, theme.card]}>
-              <View style={styles.ayahTop}>
-                <View
-                  style={[styles.number, { backgroundColor: palette.mint }]}
-                >
-                  <Text style={[styles.numberText, { color: palette.green }]}>
-                    {ayah.number}
-                  </Text>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    saved
-                      ? `Remove verse ${ayah.number} bookmark`
-                      : `Bookmark verse ${ayah.number}`
-                  }
-                  onPress={() => toggleBookmark(ayah.number)}
-                >
-                  <Bookmark
-                    size={19}
-                    color={palette.gold}
-                    fill={saved ? palette.gold : 'transparent'}
-                  />
-                </Pressable>
+        <Text style={[styles.arabic, theme.text]}>{ayah.arabic}</Text>
+        <Text style={[styles.english, theme.mutedText]}>
+          {ayah.translation}
+        </Text>
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
+      <FlatList
+        contentContainerStyle={shared.content}
+        data={surah.ayahs}
+        initialNumToRender={8}
+        keyExtractor={ayah => ayah.number}
+        maxToRenderPerBatch={8}
+        removeClippedSubviews
+        renderItem={renderAyah}
+        windowSize={7}
+        ListHeaderComponent={
+          <>
+            <View style={styles.top}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Quran"
+                onPress={() => navigation.goBack()}
+                style={[styles.button, theme.card]}
+              >
+                <ArrowLeft size={20} color={palette.ink} />
+              </Pressable>
+              <View style={styles.heading}>
+                <Text style={[styles.title, theme.text]}>{surah.name}</Text>
+                <Text style={[styles.subtitle, theme.mutedText]}>
+                  {surah.meaning} · {surah.verseCount} verses ·{' '}
+                  {surah.revelationType}
+                </Text>
               </View>
-              <Text style={[styles.arabic, theme.text]}>{ayah.arabic}</Text>
-              <Text style={[styles.english, theme.mutedText]}>
-                {ayah.translation}
-              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  playing ? 'Pause recitation' : 'Play recitation'
+                }
+                onPress={() => setPlaying(value => !value)}
+                style={[
+                  styles.button,
+                  theme.card,
+                  playing && styles.buttonActive,
+                ]}
+              >
+                {playing ? (
+                  <Pause size={19} fill={colors.white} color={colors.white} />
+                ) : (
+                  <Play size={19} color={palette.green} />
+                )}
+              </Pressable>
             </View>
-          );
-        })}
-      </ScrollView>
+            <View style={styles.bismillah}>
+              <Text style={styles.bismillahArabic}>
+                {surah.number !== '1' && surah.number !== '9'
+                  ? 'بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ'
+                  : surah.arabicName}
+              </Text>
+              {playing ? (
+                <Text style={styles.playing}>RECITATION PLAYING</Text>
+              ) : null}
+            </View>
+          </>
+        }
+        ListFooterComponent={
+          <Text style={[styles.attribution, theme.mutedText]}>
+            Hafs ‘an ‘Asim · Uthmani Arabic · {language.label} ·{' '}
+            {language.translator}
+          </Text>
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -118,7 +155,12 @@ const styles = StyleSheet.create({
   buttonActive: { backgroundColor: colors.green },
   heading: { flex: 1, alignItems: 'center' },
   title: { color: colors.ink, fontSize: 20, fontWeight: '700' },
-  subtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  subtitle: {
+    color: colors.muted,
+    fontSize: 10,
+    marginTop: 3,
+    textAlign: 'center',
+  },
   bismillah: {
     backgroundColor: colors.green,
     borderRadius: 24,
@@ -142,8 +184,9 @@ const styles = StyleSheet.create({
   ayah: { ...shared.card, padding: 19, marginBottom: 12 },
   ayahTop: { flexDirection: 'row', justifyContent: 'space-between' },
   number: {
-    width: 30,
+    minWidth: 30,
     height: 30,
+    paddingHorizontal: 8,
     borderRadius: 10,
     backgroundColor: colors.mint,
     alignItems: 'center',
@@ -158,4 +201,10 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   english: { color: colors.muted, fontSize: 13, lineHeight: 21 },
+  attribution: {
+    color: colors.muted,
+    fontSize: 9,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 });

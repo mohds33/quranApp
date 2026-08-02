@@ -16,17 +16,25 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import { surahs } from '../data/quran';
+import { totalAyahCount } from '../data/quran';
+import { getSurahs, quranLanguageOptions } from '../data/quran';
+import { useAppPreferences } from '../components/AppPreferencesContext';
 
 export default function SurahListScreen({ navigation }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
+  const { preferences } = useAppPreferences();
+  const localizedSurahs = getSurahs(preferences.quranLanguage);
+  const language =
+    quranLanguageOptions.find(
+      option => option.code === preferences.quranLanguage,
+    ) ?? quranLanguageOptions[0];
   const [query, setQuery] = useState('');
   const [savedOnly, setSavedOnly] = useState(false);
   const [savedSurahs] = useState(['1', '2']);
   const results = useMemo(() => {
     const search = query.trim().toLowerCase();
-    return surahs.filter(surah => {
+    return localizedSurahs.filter(surah => {
       const matchesSearch =
         !search ||
         [surah.name, surah.meaning, surah.arabicName, surah.number].some(
@@ -36,7 +44,7 @@ export default function SurahListScreen({ navigation }: any) {
         matchesSearch && (!savedOnly || savedSurahs.includes(surah.number))
       );
     });
-  }, [query, savedOnly, savedSurahs]);
+  }, [localizedSurahs, query, savedOnly, savedSurahs]);
 
   const openSurah = (surahNumber: string) =>
     navigation.navigate('SurahDetail', { surahNumber });
@@ -48,7 +56,10 @@ export default function SurahListScreen({ navigation }: any) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <ScreenTitle title="The Quran" subtitle="Read, listen, reflect" />
+          <ScreenTitle
+            title="The Quran"
+            subtitle={`114 surahs · ${totalAyahCount.toLocaleString()} ayahs · ${language.label} offline`}
+          />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Show saved surahs"
@@ -115,7 +126,8 @@ export default function SurahListScreen({ navigation }: any) {
               <View style={styles.copy}>
                 <Text style={[styles.name, theme.text]}>{surah.name}</Text>
                 <Text style={[styles.meta, theme.mutedText]}>
-                  {surah.meaning} · {surah.verseCount} verses
+                  {surah.meaning} · {surah.verseCount} verses ·{' '}
+                  {surah.revelationType}
                 </Text>
               </View>
               <Text style={[styles.arabic, theme.text]}>
@@ -130,6 +142,10 @@ export default function SurahListScreen({ navigation }: any) {
             </Text>
           ) : null}
         </View>
+        <Text style={[styles.attribution, theme.mutedText]}>
+          Hafs ‘an ‘Asim · Uthmani Arabic · {language.translator} · Quran JSON
+          CC BY-SA 4.0
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -205,4 +221,11 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, fontSize: 10, marginTop: 4 },
   arabic: { color: colors.ink, fontSize: 18 },
   empty: { color: colors.muted, textAlign: 'center', padding: 30 },
+  attribution: {
+    color: colors.muted,
+    fontSize: 9,
+    lineHeight: 14,
+    textAlign: 'center',
+    marginTop: 16,
+  },
 });
