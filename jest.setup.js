@@ -25,3 +25,16 @@ jest.mock('lucide-react-native', () => {
     },
   );
 });
+
+jest.mock('react-native-maps', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const MockMap = React.forwardRef((props, ref) =>
+    React.createElement(View, { ...props, ref }, props.children),
+  );
+  return {
+    __esModule: true,
+    default: MockMap,
+    Marker: View,
+  };
+});

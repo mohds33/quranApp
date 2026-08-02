@@ -184,8 +184,10 @@ async function fetchWithTimeout(url: string, timeoutMs: number) {
 
 export async function fetchNearbyMosques(
   origin: Coordinates,
+  radiusMeters = 30000,
 ): Promise<Mosque[]> {
-  const query = `[out:json][timeout:20];nwr["religion"="muslim"]["amenity"~"place_of_worship|community_centre"](around:30000,${origin.latitude},${origin.longitude});out center tags;`;
+  const radius = Math.round(Math.max(5000, Math.min(radiusMeters, 50000)));
+  const query = `[out:json][timeout:20];nwr["religion"="muslim"]["amenity"~"place_of_worship|community_centre"](around:${radius},${origin.latitude},${origin.longitude});out center tags;`;
   const encodedQuery = encodeURIComponent(query);
   const endpoints = [
     `https://overpass-api.de/api/interpreter?data=${encodedQuery}`,
