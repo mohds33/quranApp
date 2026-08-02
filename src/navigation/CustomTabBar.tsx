@@ -4,13 +4,21 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import { Home, Clock3, BookOpen, Heart, Settings } from 'lucide-react-native';
+import {
+  Home,
+  Clock3,
+  BookOpen,
+  Heart,
+  LibraryBig,
+  Settings,
+} from 'lucide-react-native';
 import { colors } from '../components/DesignSystem';
 
 const ICONS = {
   Home: Home,
   Prayer: Clock3,
   Quran: BookOpen,
+  Hadith: LibraryBig,
   Duas: Heart,
   Settings: Settings,
 };
@@ -26,7 +34,7 @@ function TabButton({ route, isFocused, onPress }: any) {
     <Pressable onPress={onPress} style={styles.tabButton}>
       <Animated.View style={animatedStyle}>
         <Icon
-          size={24}
+          size={22}
           color={isFocused ? colors.green : '#9AA39F'}
           strokeWidth={isFocused ? 2.5 : 2}
         />
@@ -83,7 +91,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 26,
     paddingVertical: 11,
-    paddingHorizontal: 18,
+    paddingHorizontal: 13,
     justifyContent: 'space-between',
     width: '100%',
     shadowColor: '#000',
@@ -96,6 +104,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: { color: '#9AA39F', fontSize: 9, fontWeight: '600', marginTop: 3 },
+  label: { color: '#9AA39F', fontSize: 8, fontWeight: '600', marginTop: 3 },
   labelActive: { color: colors.green },
 });
