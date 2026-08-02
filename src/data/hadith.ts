@@ -55,7 +55,7 @@ export const hadithCollections: HadithCollection[] = [
     arabicTitle: 'صحيح البخاري',
     compiler: 'Imam al-Bukhari',
     category: 'Canonical',
-    sizeLabel: '97 books',
+    sizeLabel: '7,277 hadith · 97 books',
     description:
       'The most widely recognized collection of rigorously authenticated narrations.',
     samples: [intention, character],
@@ -66,7 +66,7 @@ export const hadithCollections: HadithCollection[] = [
     arabicTitle: 'صحيح مسلم',
     compiler: 'Imam Muslim',
     category: 'Canonical',
-    sizeLabel: '56 books',
+    sizeLabel: '7,459 hadith · 57 books',
     description:
       'A foundational collection arranged carefully by subject and chains of narration.',
     samples: [counsel, mercy],

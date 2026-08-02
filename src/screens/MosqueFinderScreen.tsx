@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   PermissionsAndroid,
   Platform,
   Pressable,
@@ -34,9 +35,8 @@ import {
   distanceKm,
   fallbackNearbyMosques,
   fetchNearbyMosques,
-  fetchPrayerTimings,
+  geocodeCanadianPostalCode,
   Mosque,
-  PrayerTimings,
 } from '../services/mosques';
 
 Geolocation.setRNConfiguration({
@@ -77,58 +77,97 @@ export default function MosqueFinderScreen({ navigation }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
   const [query, setQuery] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [postalError, setPostalError] = useState('');
   const [mosques, setMosques] = useState<Mosque[]>([]);
-  const [timings, setTimings] = useState<PrayerTimings | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('Finding your location…');
   const [precise, setPrecise] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setMessage('Finding your location…');
-    let origin = CALGARY_CENTRE;
-    let hasLocation = false;
-    try {
-      origin = await currentLocation();
-      hasLocation = true;
-      setPrecise(true);
-    } catch {
-      setPrecise(false);
-      setMessage('Location is off · showing Calgary');
-    }
-    try {
-      const [nearby, prayerTimes] = await Promise.all([
-        fetchNearbyMosques(origin),
-        fetchPrayerTimings(origin),
-      ]);
-      setMosques(
-        nearby.length
-          ? nearby
-          : distanceKm(origin, CALGARY_CENTRE) < 100
-          ? fallbackNearbyMosques(origin)
-          : [],
-      );
-      setTimings(prayerTimes);
-      setMessage(
-        hasLocation
-          ? 'Mosques within 25 km · nearest first'
-          : 'Calgary mosques · enable location for distances',
-      );
-    } catch {
+  const loadForOrigin = useCallback(
+    async (origin: Coordinates, successMessage: string) => {
+      let liveMosques: Mosque[] = [];
+      let searchFailed = false;
+      try {
+        liveMosques = await fetchNearbyMosques(origin);
+      } catch {
+        searchFailed = true;
+      }
       const fallback =
-        distanceKm(origin, CALGARY_CENTRE) < 100
+        !liveMosques.length && distanceKm(origin, CALGARY_CENTRE) < 100
           ? fallbackNearbyMosques(origin)
           : [];
-      setMosques(fallback);
-      setMessage(
-        fallback.length
-          ? 'Using saved Calgary mosque data'
-          : 'Could not load mosques. Check your connection and retry.',
+      const nextMosques = liveMosques.length ? liveMosques : fallback;
+      setMosques(nextMosques);
+
+      if (liveMosques.length) setMessage(successMessage);
+      else if (fallback.length) setMessage('Using saved Calgary mosque data');
+      else if (searchFailed)
+        setMessage('Mosque search is unavailable. Check your connection.');
+      else setMessage('No mapped mosques found within 30 km of this area.');
+      setLoading(false);
+    },
+    [],
+  );
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setPostalError('');
+    setMessage('Finding your location…');
+    try {
+      const origin = await currentLocation();
+      setPrecise(true);
+      await loadForOrigin(
+        origin,
+        'Using your current location · nearest mosque first',
       );
-    } finally {
+    } catch {
+      setPrecise(false);
+      await loadForOrigin(
+        CALGARY_CENTRE,
+        'Location unavailable · showing Calgary. Try your postal code.',
+      );
+    }
+  }, [loadForOrigin]);
+
+  const changePostalCode = (value: string) => {
+    const normalized = value
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 6);
+    setPostalCode(
+      normalized.length > 3
+        ? `${normalized.slice(0, 3)} ${normalized.slice(3)}`
+        : normalized,
+    );
+    if (postalError) setPostalError('');
+  };
+
+  const searchByPostalCode = async () => {
+    Keyboard.dismiss();
+    setLoading(true);
+    setPostalError('');
+    setPrecise(false);
+    setMessage('Finding your postal-code area…');
+    try {
+      const area = await geocodeCanadianPostalCode(postalCode);
+      setPostalCode(area.postalArea);
+      await loadForOrigin(
+        area.coordinates,
+        `${area.postalArea} · ${area.city}${
+          area.province ? `, ${area.province}` : ''
+        } · nearest first`,
+      );
+    } catch (error) {
+      setPostalError(
+        error instanceof Error
+          ? error.message
+          : 'Could not find that postal code.',
+      );
+      setMessage('Enter a Canadian postal code to search without GPS.');
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     load();
@@ -146,7 +185,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
   );
   const closest = results[0];
   const openMosque = (mosque: Mosque) =>
-    navigation.navigate('MosqueDetail', { mosque, timings });
+    navigation.navigate('MosqueDetail', { mosque });
 
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
@@ -172,6 +211,59 @@ export default function MosqueFinderScreen({ navigation }: any) {
             color={precise ? palette.green : palette.gold}
           />
           <Text style={[styles.locationText, theme.mutedText]}>{message}</Text>
+        </View>
+        <View style={[styles.postalCard, theme.card]}>
+          <Text style={[styles.postalTitle, theme.text]}>
+            Search by postal code
+          </Text>
+          <Text style={[styles.postalHint, theme.mutedText]}>
+            Works without location access. A full code or the first 3 characters
+            is enough.
+          </Text>
+          <View style={[styles.postalInputRow, theme.border]}>
+            <MapPin size={18} color={palette.green} />
+            <TextInput
+              accessibilityLabel="Canadian postal code"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={7}
+              onChangeText={changePostalCode}
+              onSubmitEditing={searchByPostalCode}
+              placeholder="T2P 1J9"
+              placeholderTextColor={palette.muted}
+              returnKeyType="search"
+              style={[styles.postalInput, theme.text]}
+              value={postalCode}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search mosques by postal code"
+              disabled={loading}
+              onPress={searchByPostalCode}
+              style={({ pressed }) => [
+                styles.postalButton,
+                (pressed || loading) && styles.pressed,
+              ]}
+            >
+              <Search size={16} color={colors.white} />
+              <Text style={styles.postalButtonText}>Search</Text>
+            </Pressable>
+          </View>
+          {postalError ? (
+            <Text style={styles.postalError}>{postalError}</Text>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Use my current location"
+            disabled={loading}
+            onPress={load}
+            style={styles.useLocation}
+          >
+            <LocateFixed size={15} color={palette.green} />
+            <Text style={[styles.useLocationText, { color: palette.green }]}>
+              Use my current location
+            </Text>
+          </Pressable>
         </View>
         {loading ? (
           <View style={styles.loading}>
@@ -208,7 +300,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
                 accessibilityLabel="Search nearby mosques"
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search local mosques"
+                placeholder="Filter mosque names"
                 placeholderTextColor={palette.muted}
                 style={[styles.input, theme.text]}
               />
@@ -268,8 +360,8 @@ export default function MosqueFinderScreen({ navigation }: any) {
           </>
         )}
         <Text style={[styles.attribution, theme.mutedText]}>
-          Mosque data © OpenStreetMap contributors · Prayer times calculated by
-          AlAdhan
+          Mosque data © OpenStreetMap contributors · Postal areas by
+          Zippopotam.us · Prayer times calculated by AlAdhan
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -294,6 +386,46 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   locationText: { color: colors.muted, fontSize: 12, flex: 1 },
+  postalCard: { ...shared.card, padding: 16, marginBottom: 14 },
+  postalTitle: { color: colors.ink, fontSize: 15, fontWeight: '800' },
+  postalHint: {
+    color: colors.muted,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 4,
+  },
+  postalInputRow: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 15,
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    marginTop: 12,
+  },
+  postalInput: { color: colors.ink, flex: 1, height: 48, paddingHorizontal: 9 },
+  postalButton: {
+    alignSelf: 'stretch',
+    backgroundColor: colors.green,
+    borderRadius: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 13,
+    margin: 3,
+  },
+  postalButtonText: { color: colors.white, fontSize: 11, fontWeight: '800' },
+  postalError: { color: '#C65353', fontSize: 10, marginTop: 8 },
+  useLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 11,
+  },
+  useLocationText: { color: colors.green, fontSize: 11, fontWeight: '700' },
+  pressed: { opacity: 0.65 },
   loading: { alignItems: 'center', paddingVertical: 70, gap: 13 },
   loadingText: { color: colors.muted, fontSize: 12 },
   closest: {

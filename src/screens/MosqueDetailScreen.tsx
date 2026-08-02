@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Linking,
   Pressable,
   ScrollView,
@@ -21,7 +22,7 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import { PrayerTimings } from '../services/mosques';
+import { fetchPrayerTimings, PrayerTimings } from '../services/mosques';
 
 const prayerNames: Array<keyof PrayerTimings> = [
   'Fajr',
@@ -35,7 +36,29 @@ const prayerNames: Array<keyof PrayerTimings> = [
 export default function MosqueDetailScreen({ navigation, route }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { mosque, timings } = route.params;
+  const { mosque } = route.params;
+  const [timings, setTimings] = useState<PrayerTimings | null>(null);
+  const [loadingTimings, setLoadingTimings] = useState(true);
+  useEffect(() => {
+    let active = true;
+    setLoadingTimings(true);
+    fetchPrayerTimings({
+      latitude: mosque.latitude,
+      longitude: mosque.longitude,
+    })
+      .then(value => {
+        if (active) setTimings(value);
+      })
+      .catch(() => {
+        if (active) setTimings(null);
+      })
+      .finally(() => {
+        if (active) setLoadingTimings(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [mosque.latitude, mosque.longitude]);
   const directions = () =>
     Linking.openURL(
       `https://www.google.com/maps/dir/?api=1&destination=${mosque.latitude},${mosque.longitude}`,
@@ -104,7 +127,13 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
           </View>
         </View>
         <View style={[styles.times, theme.card]}>
-          {timings ? (
+          {loadingTimings ? (
+            <ActivityIndicator
+              accessibilityLabel="Loading prayer times"
+              color={palette.green}
+              style={styles.timesLoading}
+            />
+          ) : timings ? (
             prayerNames.map(name => (
               <View key={name} style={[styles.timeRow, theme.border]}>
                 <Text style={[styles.prayerName, theme.text]}>{name}</Text>
@@ -226,6 +255,7 @@ const styles = StyleSheet.create({
   prayerName: { color: colors.ink, fontSize: 13, fontWeight: '600' },
   prayerTime: { color: colors.ink, fontSize: 13, fontWeight: '800' },
   unavailable: { padding: 24, textAlign: 'center' },
+  timesLoading: { marginVertical: 26 },
   notice: {
     backgroundColor: colors.mint,
     borderRadius: 18,

@@ -1,5 +1,12 @@
 export type Coordinates = { latitude: number; longitude: number };
 
+export type PostalArea = {
+  coordinates: Coordinates;
+  postalArea: string;
+  city: string;
+  province: string;
+};
+
 export type Mosque = {
   id: string;
   name: string;
@@ -133,16 +140,69 @@ export function fallbackNearbyMosques(origin: Coordinates) {
   return withDistances(fallbackMosques, origin);
 }
 
+export async function geocodeCanadianPostalCode(
+  postalCode: string,
+): Promise<PostalArea> {
+  const normalized = postalCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const validPostalCode =
+    /^[ABCEGHJKLMNPRSTVXY]\d[ABCEGHJKLMNPRSTVWXYZ](?:\d[ABCEGHJKLMNPRSTVWXYZ]\d)?$/;
+  if (!validPostalCode.test(normalized)) {
+    throw new Error('Enter a valid Canadian postal code, such as T2P 1J9.');
+  }
+
+  // Canadian postal lookups use the first three characters (the FSA). This
+  // keeps the search private while still producing a useful local radius.
+  const postalArea = normalized.slice(0, 3);
+  const response = await fetch(
+    `https://api.zippopotam.us/CA/${encodeURIComponent(postalArea)}`,
+  );
+  if (!response.ok) throw new Error('That postal code area was not found.');
+  const payload = await response.json();
+  const place = payload.places?.[0];
+  const latitude = Number(place?.latitude);
+  const longitude = Number(place?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error('That postal code area was not found.');
+  }
+  return {
+    coordinates: { latitude, longitude },
+    postalArea,
+    city: place['place name'] ?? 'Local area',
+    province: place.state ?? '',
+  };
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function fetchNearbyMosques(
   origin: Coordinates,
 ): Promise<Mosque[]> {
-  const query = `[out:json][timeout:25];nwr["amenity"="place_of_worship"]["religion"="muslim"](around:25000,${origin.latitude},${origin.longitude});out center tags;`;
-  const response = await fetch(
-    `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`,
-  );
-  if (!response.ok)
-    throw new Error('Mosque search is temporarily unavailable.');
-  const payload = await response.json();
+  const query = `[out:json][timeout:20];nwr["religion"="muslim"]["amenity"~"place_of_worship|community_centre"](around:30000,${origin.latitude},${origin.longitude});out center tags;`;
+  const encodedQuery = encodeURIComponent(query);
+  const endpoints = [
+    `https://overpass-api.de/api/interpreter?data=${encodedQuery}`,
+    `https://overpass.kumi.systems/api/interpreter?data=${encodedQuery}`,
+  ];
+  let payload: any;
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetchWithTimeout(endpoint, 15000);
+      if (!response.ok) continue;
+      payload = await response.json();
+      break;
+    } catch {
+      // Try the next public Overpass instance.
+    }
+  }
+  if (!payload) throw new Error('Mosque search is temporarily unavailable.');
   const seen = new Set<string>();
   const mosques = payload.elements.flatMap((element: any) => {
     const latitude = element.lat ?? element.center?.lat;
