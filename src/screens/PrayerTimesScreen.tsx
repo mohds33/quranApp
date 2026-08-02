@@ -1,5 +1,12 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, Check, MapPin } from 'lucide-react-native';
 import { colors, ScreenTitle, shared } from '../components/DesignSystem';
@@ -13,7 +20,15 @@ const prayers = [
   ['Isha', '10:51 PM'],
 ];
 
-export default function PrayerTimesScreen() {
+export default function PrayerTimesScreen({ navigation }: any) {
+  const [reminders, setReminders] = useState<string[]>(['Fajr', 'Maghrib']);
+  const toggleReminder = (name: string) =>
+    setReminders(items =>
+      items.includes(name)
+        ? items.filter(item => item !== name)
+        : [...items, name],
+    );
+
   return (
     <SafeAreaView style={shared.screen} edges={['top']}>
       <ScrollView contentContainerStyle={shared.content}>
@@ -21,11 +36,16 @@ export default function PrayerTimesScreen() {
           title="Prayer times"
           subtitle="Saturday, August 1 · 18 Muharram 1448"
         />
-        <View style={styles.location}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Change prayer location and calculation method"
+          onPress={() => navigation.navigate('Settings')}
+          style={styles.location}
+        >
           <MapPin size={16} color={colors.green} />
           <Text style={styles.locationText}>Calgary, Alberta</Text>
           <Text style={styles.method}>ISNA</Text>
-        </View>
+        </Pressable>
         <View style={styles.list}>
           {prayers.map(([name, time], i) => {
             const active = name === 'Maghrib';
@@ -45,7 +65,40 @@ export default function PrayerTimesScreen() {
                 <Text style={[styles.time, active && styles.activeText]}>
                   {time}
                 </Text>
-                <Bell size={17} color={active ? colors.white : colors.muted} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${
+                    reminders.includes(name) ? 'Disable' : 'Enable'
+                  } ${name} reminder`}
+                  hitSlop={10}
+                  onPress={() => {
+                    toggleReminder(name);
+                    Alert.alert(
+                      `${name} reminder`,
+                      reminders.includes(name)
+                        ? 'Reminder disabled.'
+                        : 'Reminder enabled.',
+                    );
+                  }}
+                >
+                  <Bell
+                    size={18}
+                    color={
+                      active
+                        ? colors.white
+                        : reminders.includes(name)
+                        ? colors.gold
+                        : colors.muted
+                    }
+                    fill={
+                      reminders.includes(name)
+                        ? active
+                          ? colors.white
+                          : colors.gold
+                        : 'transparent'
+                    }
+                  />
+                </Pressable>
               </View>
             );
           })}

@@ -1,58 +1,116 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Bookmark, ChevronRight } from 'lucide-react-native';
+import { Search, Bookmark, ChevronRight, X } from 'lucide-react-native';
 import { colors, ScreenTitle, shared } from '../components/DesignSystem';
-
-const surahs = [
-  ['1', 'Al-Fatihah', 'The Opening', 'الفاتحة', '7'],
-  ['2', 'Al-Baqarah', 'The Cow', 'البقرة', '286'],
-  ['3', 'Ali ‘Imran', 'Family of Imran', 'آل عمران', '200'],
-  ['4', 'An-Nisa', 'The Women', 'النساء', '176'],
-  ['5', 'Al-Ma’idah', 'The Table Spread', 'المائدة', '120'],
-  ['6', 'Al-An’am', 'The Cattle', 'الأنعام', '165'],
-];
+import { surahs } from '../data/quran';
 
 export default function SurahListScreen({ navigation }: any) {
+  const [query, setQuery] = useState('');
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [savedSurahs] = useState(['1', '2']);
+  const results = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return surahs.filter(surah => {
+      const matchesSearch =
+        !search ||
+        [surah.name, surah.meaning, surah.arabicName, surah.number].some(
+          value => value.toLowerCase().includes(search),
+        );
+      return (
+        matchesSearch && (!savedOnly || savedSurahs.includes(surah.number))
+      );
+    });
+  }, [query, savedOnly, savedSurahs]);
+
+  const openSurah = (surahNumber: string) =>
+    navigation.navigate('SurahDetail', { surahNumber });
+
   return (
     <SafeAreaView style={shared.screen} edges={['top']}>
-      <ScrollView contentContainerStyle={shared.content}>
+      <ScrollView
+        contentContainerStyle={shared.content}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <ScreenTitle title="The Quran" subtitle="Read, listen, reflect" />
-          <Pressable style={styles.bookmark}>
-            <Bookmark size={20} color={colors.green} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show saved surahs"
+            onPress={() => setSavedOnly(value => !value)}
+            style={[styles.bookmark, savedOnly && styles.bookmarkActive]}
+          >
+            <Bookmark
+              size={20}
+              color={savedOnly ? colors.white : colors.green}
+              fill={savedOnly ? colors.white : 'transparent'}
+            />
           </Pressable>
         </View>
         <View style={styles.search}>
           <Search size={19} color={colors.muted} />
-          <Text style={styles.placeholder}>Search surahs or verses</Text>
+          <TextInput
+            accessibilityLabel="Search surahs"
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search surahs or verses"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            returnKeyType="search"
+          />
+          {query ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              onPress={() => setQuery('')}
+            >
+              <X size={18} color={colors.muted} />
+            </Pressable>
+          ) : null}
         </View>
-        <View style={styles.resume}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Continue reading Al-Baqarah verse 255"
+          onPress={() => openSurah('2')}
+          style={styles.resume}
+        >
           <Text style={styles.resumeLabel}>LAST READ</Text>
           <Text style={styles.resumeTitle}>Al-Baqarah · Ayah 255</Text>
           <Text style={styles.resumeMeta}>Continue from Ayatul Kursi</Text>
-        </View>
-        <Text style={styles.section}>SURAH INDEX</Text>
+        </Pressable>
+        <Text style={styles.section}>
+          {savedOnly ? 'SAVED SURAHS' : 'SURAH INDEX'}
+        </Text>
         <View style={styles.list}>
-          {surahs.map(([n, en, tr, ar, verses]) => (
+          {results.map(surah => (
             <Pressable
-              key={n}
+              key={surah.number}
               style={styles.row}
-              onPress={() => navigation.navigate('SurahDetail')}
+              onPress={() => openSurah(surah.number)}
             >
               <View style={styles.number}>
-                <Text style={styles.numberText}>{n}</Text>
+                <Text style={styles.numberText}>{surah.number}</Text>
               </View>
               <View style={styles.copy}>
-                <Text style={styles.name}>{en}</Text>
+                <Text style={styles.name}>{surah.name}</Text>
                 <Text style={styles.meta}>
-                  {tr} · {verses} verses
+                  {surah.meaning} · {surah.verseCount} verses
                 </Text>
               </View>
-              <Text style={styles.arabic}>{ar}</Text>
+              <Text style={styles.arabic}>{surah.arabicName}</Text>
               <ChevronRight size={16} color={colors.muted} />
             </Pressable>
           ))}
+          {!results.length ? (
+            <Text style={styles.empty}>No surahs match “{query}”</Text>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -69,15 +127,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  bookmarkActive: { backgroundColor: colors.green },
   search: {
     ...shared.card,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    paddingHorizontal: 15,
     gap: 10,
     marginBottom: 14,
   },
-  placeholder: { color: colors.muted, fontSize: 14 },
+  input: { color: colors.ink, fontSize: 14, flex: 1, height: 50 },
   resume: {
     backgroundColor: colors.green,
     borderRadius: 23,
@@ -106,7 +165,7 @@ const styles = StyleSheet.create({
   },
   list: { ...shared.card, overflow: 'hidden' },
   row: {
-    height: 78,
+    minHeight: 78,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
@@ -127,4 +186,5 @@ const styles = StyleSheet.create({
   name: { color: colors.ink, fontSize: 15, fontWeight: '700' },
   meta: { color: colors.muted, fontSize: 10, marginTop: 4 },
   arabic: { color: colors.ink, fontSize: 18 },
+  empty: { color: colors.muted, textAlign: 'center', padding: 30 },
 });

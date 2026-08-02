@@ -1,5 +1,12 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Bell,
@@ -7,11 +14,22 @@ import {
   ChevronRight,
   Compass,
   MapPin,
+  Pause,
   Play,
 } from 'lucide-react-native';
 import { colors, Eyebrow, shared } from '../components/DesignSystem';
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }: any) {
+  const [playing, setPlaying] = useState(false);
+  const [notifications, setNotifications] = useState(true);
+
+  const openQuran = (surahNumber = '2') => {
+    navigation.navigate('Quran', {
+      screen: 'SurahDetail',
+      params: { surahNumber },
+    });
+  };
+
   return (
     <SafeAreaView style={shared.screen} edges={['top']}>
       <ScrollView
@@ -26,12 +44,27 @@ export default function HomeScreen() {
               <Text style={styles.locationText}>Calgary, Alberta</Text>
             </View>
           </View>
-          <Pressable style={styles.iconButton}>
-            <Bell size={20} color={colors.ink} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Toggle prayer notifications"
+            onPress={() => setNotifications(value => !value)}
+            style={styles.iconButton}
+          >
+            <Bell
+              size={20}
+              color={notifications ? colors.green : colors.muted}
+              fill={notifications ? colors.mint : 'transparent'}
+            />
+            {notifications ? <View style={styles.notificationDot} /> : null}
           </Pressable>
         </View>
 
-        <View style={styles.hero}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="View full prayer schedule"
+          onPress={() => navigation.navigate('Prayer')}
+          style={styles.hero}
+        >
           <View style={styles.orbitOne} />
           <View style={styles.orbitTwo} />
           <Eyebrow>Next prayer</Eyebrow>
@@ -41,12 +74,23 @@ export default function HomeScreen() {
           </Text>
           <View style={styles.heroFooter}>
             <Text style={styles.countdown}>in 1 hr 24 min</Text>
-            <View style={styles.qibla}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show Qibla direction"
+              onPress={event => {
+                event.stopPropagation();
+                Alert.alert(
+                  'Qibla direction',
+                  'Face 42° north-east from Calgary.',
+                );
+              }}
+              style={styles.qibla}
+            >
               <Compass size={15} color={colors.white} />
               <Text style={styles.qiblaText}>Qibla 42°</Text>
-            </View>
+            </Pressable>
           </View>
-        </View>
+        </Pressable>
 
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Today’s prayers</Text>
@@ -68,7 +112,12 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        <View style={styles.continueCard}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Continue reading Al-Baqarah"
+          onPress={() => openQuran('2')}
+          style={styles.continueCard}
+        >
           <View style={styles.bookIcon}>
             <BookOpen size={22} color={colors.green} />
           </View>
@@ -77,12 +126,31 @@ export default function HomeScreen() {
             <Text style={styles.surah}>Al-Baqarah</Text>
             <Text style={styles.ayah}>Verse 255 · Ayatul Kursi</Text>
           </View>
-          <Pressable style={styles.play}>
-            <Play size={18} fill={colors.white} color={colors.white} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              playing ? 'Pause recitation' : 'Play recitation'
+            }
+            onPress={event => {
+              event.stopPropagation();
+              setPlaying(value => !value);
+            }}
+            style={styles.play}
+          >
+            {playing ? (
+              <Pause size={18} fill={colors.white} color={colors.white} />
+            ) : (
+              <Play size={18} fill={colors.white} color={colors.white} />
+            )}
           </Pressable>
-        </View>
+        </Pressable>
 
-        <Pressable style={styles.verseCard}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Read daily reflection in the Quran"
+          onPress={() => openQuran('1')}
+          style={styles.verseCard}
+        >
           <Text style={styles.verseLabel}>DAILY REFLECTION</Text>
           <Text style={styles.arabic}>فَإِنَّ مَعَ الْعُسْرِ يُسْرًا</Text>
           <Text style={styles.translation}>
@@ -125,6 +193,15 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  notificationDot: {
+    position: 'absolute',
+    right: 10,
+    top: 9,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.gold,
   },
   hero: {
     height: 230,

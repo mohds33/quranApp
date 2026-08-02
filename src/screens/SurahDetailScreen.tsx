@@ -1,59 +1,97 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bookmark, Play } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, Pause, Play } from 'lucide-react-native';
 import { colors, shared } from '../components/DesignSystem';
+import { surahs } from '../data/quran';
 
-const ayahs = [
-  [
-    '١',
-    'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
-    'In the name of Allah, the Most Compassionate, Most Merciful.',
-  ],
-  [
-    '٢',
-    'الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ',
-    'All praise is for Allah—Lord of all worlds.',
-  ],
-  ['٣', 'الرَّحْمَٰنِ الرَّحِيمِ', 'The Most Compassionate, Most Merciful.'],
-];
-export default function SurahDetailScreen({ navigation }: any) {
+export default function SurahDetailScreen({ navigation, route }: any) {
+  const surah =
+    surahs.find(item => item.number === route.params?.surahNumber) ?? surahs[0];
+  const [playing, setPlaying] = useState(false);
+  const [bookmarks, setBookmarks] = useState<string[]>([]);
+  const toggleBookmark = (number: string) =>
+    setBookmarks(items =>
+      items.includes(number)
+        ? items.filter(item => item !== number)
+        : [...items, number],
+    );
+
   return (
     <SafeAreaView style={shared.screen} edges={['top']}>
       <ScrollView contentContainerStyle={shared.content}>
         <View style={styles.top}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.button}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to Quran"
+            onPress={() => navigation.goBack()}
+            style={styles.button}
+          >
             <ArrowLeft size={20} color={colors.ink} />
           </Pressable>
           <View style={styles.heading}>
-            <Text style={styles.title}>Al-Fatihah</Text>
-            <Text style={styles.subtitle}>The Opening · 7 verses</Text>
+            <Text style={styles.title}>{surah.name}</Text>
+            <Text style={styles.subtitle}>
+              {surah.meaning} · {surah.verseCount} verses
+            </Text>
           </View>
-          <Pressable style={styles.button}>
-            <Play size={19} color={colors.green} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              playing ? 'Pause recitation' : 'Play recitation'
+            }
+            onPress={() => setPlaying(value => !value)}
+            style={[styles.button, playing && styles.buttonActive]}
+          >
+            {playing ? (
+              <Pause size={19} fill={colors.white} color={colors.white} />
+            ) : (
+              <Play size={19} color={colors.green} />
+            )}
           </Pressable>
         </View>
         <View style={styles.bismillah}>
           <Text style={styles.bismillahArabic}>
             بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ
           </Text>
+          {playing ? (
+            <Text style={styles.playing}>RECITATION PLAYING</Text>
+          ) : null}
         </View>
-        {ayahs.map(([n, ar, en]) => (
-          <View key={n} style={styles.ayah}>
-            <View style={styles.ayahTop}>
-              <View style={styles.number}>
-                <Text style={styles.numberText}>{n}</Text>
+        {surah.ayahs.map(ayah => {
+          const saved = bookmarks.includes(ayah.number);
+          return (
+            <View key={ayah.number} style={styles.ayah}>
+              <View style={styles.ayahTop}>
+                <View style={styles.number}>
+                  <Text style={styles.numberText}>{ayah.number}</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    saved
+                      ? `Remove verse ${ayah.number} bookmark`
+                      : `Bookmark verse ${ayah.number}`
+                  }
+                  onPress={() => toggleBookmark(ayah.number)}
+                >
+                  <Bookmark
+                    size={19}
+                    color={colors.gold}
+                    fill={saved ? colors.gold : 'transparent'}
+                  />
+                </Pressable>
               </View>
-              <Bookmark size={18} color={colors.gold} />
+              <Text style={styles.arabic}>{ayah.arabic}</Text>
+              <Text style={styles.english}>{ayah.translation}</Text>
             </View>
-            <Text style={styles.arabic}>{ar}</Text>
-            <Text style={styles.english}>{en}</Text>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
   button: {
@@ -64,6 +102,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  buttonActive: { backgroundColor: colors.green },
   heading: { flex: 1, alignItems: 'center' },
   title: { color: colors.ink, fontSize: 20, fontWeight: '700' },
   subtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
@@ -78,6 +117,14 @@ const styles = StyleSheet.create({
     fontSize: 25,
     textAlign: 'center',
     lineHeight: 40,
+  },
+  playing: {
+    color: colors.gold,
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textAlign: 'center',
+    marginTop: 8,
   },
   ayah: { ...shared.card, padding: 19, marginBottom: 12 },
   ayahTop: { flexDirection: 'row', justifyContent: 'space-between' },
