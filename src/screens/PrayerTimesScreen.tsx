@@ -9,7 +9,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, Check, MapPin } from 'lucide-react-native';
-import { colors, ScreenTitle, shared } from '../components/DesignSystem';
+import {
+  colors,
+  ScreenTitle,
+  shared,
+  useAppTheme,
+  useThemeStyles,
+} from '../components/DesignSystem';
 
 const prayers = [
   ['Fajr', '4:06 AM'],
@@ -21,6 +27,8 @@ const prayers = [
 ];
 
 export default function PrayerTimesScreen({ navigation }: any) {
+  const { palette } = useAppTheme();
+  const theme = useThemeStyles();
   const [reminders, setReminders] = useState<string[]>(['Fajr', 'Maghrib']);
   const toggleReminder = (name: string) =>
     setReminders(items =>
@@ -30,7 +38,7 @@ export default function PrayerTimesScreen({ navigation }: any) {
     );
 
   return (
-    <SafeAreaView style={shared.screen} edges={['top']}>
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <ScrollView contentContainerStyle={shared.content}>
         <ScreenTitle
           title="Prayer times"
@@ -40,29 +48,46 @@ export default function PrayerTimesScreen({ navigation }: any) {
           accessibilityRole="button"
           accessibilityLabel="Change prayer location and calculation method"
           onPress={() => navigation.navigate('Settings')}
-          style={styles.location}
+          style={[styles.location, theme.card]}
         >
-          <MapPin size={16} color={colors.green} />
-          <Text style={styles.locationText}>Calgary, Alberta</Text>
+          <MapPin size={16} color={palette.green} />
+          <Text style={[styles.locationText, theme.text]}>
+            Calgary, Alberta
+          </Text>
           <Text style={styles.method}>ISNA</Text>
         </Pressable>
-        <View style={styles.list}>
+        <View style={[styles.list, theme.card]}>
           {prayers.map(([name, time], i) => {
             const active = name === 'Maghrib';
             return (
-              <View key={name} style={[styles.row, active && styles.active]}>
+              <View
+                key={name}
+                style={[styles.row, theme.border, active && styles.active]}
+              >
                 <View style={[styles.dot, i < 4 && styles.dotDone]}>
                   {i < 4 ? <Check size={10} color={colors.white} /> : null}
                 </View>
                 <View style={styles.copy}>
-                  <Text style={[styles.name, active && styles.activeText]}>
+                  <Text
+                    style={[
+                      styles.name,
+                      !active && theme.text,
+                      active && styles.activeText,
+                    ]}
+                  >
                     {name}
                   </Text>
                   {active ? (
                     <Text style={styles.next}>NEXT · IN 1 HR 24 MIN</Text>
                   ) : null}
                 </View>
-                <Text style={[styles.time, active && styles.activeText]}>
+                <Text
+                  style={[
+                    styles.time,
+                    !active && theme.text,
+                    active && styles.activeText,
+                  ]}
+                >
                   {time}
                 </Text>
                 <Pressable
@@ -87,14 +112,14 @@ export default function PrayerTimesScreen({ navigation }: any) {
                       active
                         ? colors.white
                         : reminders.includes(name)
-                        ? colors.gold
-                        : colors.muted
+                        ? palette.gold
+                        : palette.muted
                     }
                     fill={
                       reminders.includes(name)
                         ? active
                           ? colors.white
-                          : colors.gold
+                          : palette.gold
                         : 'transparent'
                     }
                   />
@@ -103,7 +128,7 @@ export default function PrayerTimesScreen({ navigation }: any) {
             );
           })}
         </View>
-        <Text style={styles.note}>
+        <Text style={[styles.note, theme.mutedText]}>
           Times are calculated using your current location. You can change the
           calculation method in Settings.
         </Text>

@@ -9,7 +9,13 @@ import {
   Moon,
   Shield,
 } from 'lucide-react-native';
-import { colors, ScreenTitle, shared } from '../components/DesignSystem';
+import {
+  colors,
+  ScreenTitle,
+  shared,
+  useAppTheme,
+  useThemeStyles,
+} from '../components/DesignSystem';
 
 const collections = [
   {
@@ -45,6 +51,8 @@ const collections = [
 ];
 
 export default function DuasScreen() {
+  const { palette } = useAppTheme();
+  const theme = useThemeStyles();
   const [selected, setSelected] = useState<string | null>(null);
   const [favourites, setFavourites] = useState<string[]>(['Morning']);
   const [showSaved, setShowSaved] = useState(false);
@@ -64,7 +72,7 @@ export default function DuasScreen() {
     );
 
   return (
-    <SafeAreaView style={shared.screen} edges={['top']}>
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <ScrollView contentContainerStyle={shared.content}>
         <ScreenTitle
           title={
@@ -86,8 +94,10 @@ export default function DuasScreen() {
               onPress={() => setSelected(null)}
               style={styles.back}
             >
-              <ArrowLeft size={18} color={colors.green} />
-              <Text style={styles.backText}>All collections</Text>
+              <ArrowLeft size={18} color={palette.green} />
+              <Text style={[styles.backText, { color: palette.green }]}>
+                All collections
+              </Text>
             </Pressable>
             <View style={styles.feature}>
               <Text style={styles.label}>
@@ -132,7 +142,7 @@ export default function DuasScreen() {
                 <Text style={styles.source}>Taha · 20:114</Text>
               </View>
             ) : null}
-            <Text style={styles.section}>
+            <Text style={[styles.section, theme.mutedText]}>
               {showSaved ? 'FAVOURITES' : 'COLLECTIONS'}
             </Text>
             <View style={styles.grid}>
@@ -142,18 +152,22 @@ export default function DuasScreen() {
                   accessibilityLabel={`Open ${title} duas`}
                   onPress={() => setSelected(title)}
                   key={title}
-                  style={styles.card}
+                  style={[styles.card, theme.card]}
                 >
-                  <View style={styles.icon}>
-                    <Icon size={22} color={colors.green} />
+                  <View
+                    style={[styles.icon, { backgroundColor: palette.mint }]}
+                  >
+                    <Icon size={22} color={palette.green} />
                   </View>
-                  <Text style={styles.title}>{title}</Text>
-                  <Text style={styles.count}>{count}</Text>
+                  <Text style={[styles.title, theme.text]}>{title}</Text>
+                  <Text style={[styles.count, theme.mutedText]}>{count}</Text>
                 </Pressable>
               ))}
             </View>
             {showSaved && !visibleCollections.length ? (
-              <Text style={styles.empty}>No saved duas yet.</Text>
+              <Text style={[styles.empty, theme.mutedText]}>
+                No saved duas yet.
+              </Text>
             ) : null}
             <Pressable
               accessibilityRole="button"
@@ -161,7 +175,11 @@ export default function DuasScreen() {
                 showSaved ? 'Show all Dua collections' : 'Show saved Duas'
               }
               onPress={() => setShowSaved(value => !value)}
-              style={[styles.saved, showSaved && styles.savedActive]}
+              style={[
+                styles.saved,
+                theme.card,
+                showSaved && styles.savedActive,
+              ]}
             >
               <Heart
                 size={20}
@@ -172,6 +190,7 @@ export default function DuasScreen() {
                 <Text
                   style={[
                     styles.savedTitle,
+                    !showSaved && theme.text,
                     showSaved && styles.savedTitleActive,
                   ]}
                 >
@@ -180,6 +199,7 @@ export default function DuasScreen() {
                 <Text
                   style={[
                     styles.savedMeta,
+                    !showSaved && theme.mutedText,
                     showSaved && styles.savedMetaActive,
                   ]}
                 >

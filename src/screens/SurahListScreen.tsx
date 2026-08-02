@@ -9,10 +9,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Bookmark, ChevronRight, X } from 'lucide-react-native';
-import { colors, ScreenTitle, shared } from '../components/DesignSystem';
+import {
+  colors,
+  ScreenTitle,
+  shared,
+  useAppTheme,
+  useThemeStyles,
+} from '../components/DesignSystem';
 import { surahs } from '../data/quran';
 
 export default function SurahListScreen({ navigation }: any) {
+  const { palette } = useAppTheme();
+  const theme = useThemeStyles();
   const [query, setQuery] = useState('');
   const [savedOnly, setSavedOnly] = useState(false);
   const [savedSurahs] = useState(['1', '2']);
@@ -34,7 +42,7 @@ export default function SurahListScreen({ navigation }: any) {
     navigation.navigate('SurahDetail', { surahNumber });
 
   return (
-    <SafeAreaView style={shared.screen} edges={['top']}>
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <ScrollView
         contentContainerStyle={shared.content}
         keyboardShouldPersistTaps="handled"
@@ -45,24 +53,28 @@ export default function SurahListScreen({ navigation }: any) {
             accessibilityRole="button"
             accessibilityLabel="Show saved surahs"
             onPress={() => setSavedOnly(value => !value)}
-            style={[styles.bookmark, savedOnly && styles.bookmarkActive]}
+            style={[
+              styles.bookmark,
+              theme.card,
+              savedOnly && styles.bookmarkActive,
+            ]}
           >
             <Bookmark
               size={20}
-              color={savedOnly ? colors.white : colors.green}
+              color={savedOnly ? colors.white : palette.green}
               fill={savedOnly ? colors.white : 'transparent'}
             />
           </Pressable>
         </View>
-        <View style={styles.search}>
-          <Search size={19} color={colors.muted} />
+        <View style={[styles.search, theme.card]}>
+          <Search size={19} color={palette.muted} />
           <TextInput
             accessibilityLabel="Search surahs"
             value={query}
             onChangeText={setQuery}
             placeholder="Search surahs or verses"
-            placeholderTextColor={colors.muted}
-            style={styles.input}
+            placeholderTextColor={palette.muted}
+            style={[styles.input, theme.text]}
             returnKeyType="search"
           />
           {query ? (
@@ -71,7 +83,7 @@ export default function SurahListScreen({ navigation }: any) {
               accessibilityLabel="Clear search"
               onPress={() => setQuery('')}
             >
-              <X size={18} color={colors.muted} />
+              <X size={18} color={palette.muted} />
             </Pressable>
           ) : null}
         </View>
@@ -85,31 +97,37 @@ export default function SurahListScreen({ navigation }: any) {
           <Text style={styles.resumeTitle}>Al-Baqarah · Ayah 255</Text>
           <Text style={styles.resumeMeta}>Continue from Ayatul Kursi</Text>
         </Pressable>
-        <Text style={styles.section}>
+        <Text style={[styles.section, theme.mutedText]}>
           {savedOnly ? 'SAVED SURAHS' : 'SURAH INDEX'}
         </Text>
-        <View style={styles.list}>
+        <View style={[styles.list, theme.card]}>
           {results.map(surah => (
             <Pressable
               key={surah.number}
-              style={styles.row}
+              style={[styles.row, theme.border]}
               onPress={() => openSurah(surah.number)}
             >
-              <View style={styles.number}>
-                <Text style={styles.numberText}>{surah.number}</Text>
+              <View style={[styles.number, { backgroundColor: palette.mint }]}>
+                <Text style={[styles.numberText, { color: palette.green }]}>
+                  {surah.number}
+                </Text>
               </View>
               <View style={styles.copy}>
-                <Text style={styles.name}>{surah.name}</Text>
-                <Text style={styles.meta}>
+                <Text style={[styles.name, theme.text]}>{surah.name}</Text>
+                <Text style={[styles.meta, theme.mutedText]}>
                   {surah.meaning} · {surah.verseCount} verses
                 </Text>
               </View>
-              <Text style={styles.arabic}>{surah.arabicName}</Text>
-              <ChevronRight size={16} color={colors.muted} />
+              <Text style={[styles.arabic, theme.text]}>
+                {surah.arabicName}
+              </Text>
+              <ChevronRight size={16} color={palette.muted} />
             </Pressable>
           ))}
           {!results.length ? (
-            <Text style={styles.empty}>No surahs match “{query}”</Text>
+            <Text style={[styles.empty, theme.mutedText]}>
+              No surahs match “{query}”
+            </Text>
           ) : null}
         </View>
       </ScrollView>

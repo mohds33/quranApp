@@ -17,9 +17,17 @@ import {
   Pause,
   Play,
 } from 'lucide-react-native';
-import { colors, Eyebrow, shared } from '../components/DesignSystem';
+import {
+  colors,
+  Eyebrow,
+  shared,
+  useAppTheme,
+  useThemeStyles,
+} from '../components/DesignSystem';
 
 export default function HomeScreen({ navigation }: any) {
+  const { palette, isDark } = useAppTheme();
+  const theme = useThemeStyles();
   const [playing, setPlaying] = useState(false);
   const [notifications, setNotifications] = useState(true);
 
@@ -31,29 +39,31 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={shared.screen} edges={['top']}>
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <ScrollView
         contentContainerStyle={shared.content}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topbar}>
           <View>
-            <Text style={styles.greeting}>Assalamu alaikum</Text>
+            <Text style={[styles.greeting, theme.text]}>Assalamu alaikum</Text>
             <View style={styles.location}>
-              <MapPin size={13} color={colors.muted} />
-              <Text style={styles.locationText}>Calgary, Alberta</Text>
+              <MapPin size={13} color={palette.muted} />
+              <Text style={[styles.locationText, theme.mutedText]}>
+                Calgary, Alberta
+              </Text>
             </View>
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Toggle prayer notifications"
             onPress={() => setNotifications(value => !value)}
-            style={styles.iconButton}
+            style={[styles.iconButton, theme.card]}
           >
             <Bell
               size={20}
-              color={notifications ? colors.green : colors.muted}
-              fill={notifications ? colors.mint : 'transparent'}
+              color={notifications ? palette.green : palette.muted}
+              fill={notifications ? palette.mint : 'transparent'}
             />
             {notifications ? <View style={styles.notificationDot} /> : null}
           </Pressable>
@@ -93,8 +103,8 @@ export default function HomeScreen({ navigation }: any) {
         </Pressable>
 
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Today’s prayers</Text>
-          <Text style={styles.date}>18 Muharram</Text>
+          <Text style={[styles.sectionTitle, theme.text]}>Today’s prayers</Text>
+          <Text style={[styles.date, theme.mutedText]}>18 Muharram</Text>
         </View>
         <View style={styles.times}>
           {[
@@ -106,8 +116,8 @@ export default function HomeScreen({ navigation }: any) {
             ['Isha', '10:51 PM'],
           ].map(([name, time]) => (
             <View key={name} style={styles.timeItem}>
-              <Text style={styles.timeName}>{name}</Text>
-              <Text style={styles.timeValue}>{time}</Text>
+              <Text style={[styles.timeName, theme.mutedText]}>{name}</Text>
+              <Text style={[styles.timeValue, theme.text]}>{time}</Text>
             </View>
           ))}
         </View>
@@ -116,15 +126,17 @@ export default function HomeScreen({ navigation }: any) {
           accessibilityRole="button"
           accessibilityLabel="Continue reading Al-Baqarah"
           onPress={() => openQuran('2')}
-          style={styles.continueCard}
+          style={[styles.continueCard, theme.card]}
         >
-          <View style={styles.bookIcon}>
-            <BookOpen size={22} color={colors.green} />
+          <View style={[styles.bookIcon, { backgroundColor: palette.mint }]}>
+            <BookOpen size={22} color={palette.green} />
           </View>
           <View style={styles.continueCopy}>
             <Text style={styles.overline}>CONTINUE READING</Text>
-            <Text style={styles.surah}>Al-Baqarah</Text>
-            <Text style={styles.ayah}>Verse 255 · Ayatul Kursi</Text>
+            <Text style={[styles.surah, theme.text]}>Al-Baqarah</Text>
+            <Text style={[styles.ayah, theme.mutedText]}>
+              Verse 255 · Ayatul Kursi
+            </Text>
           </View>
           <Pressable
             accessibilityRole="button"
@@ -149,15 +161,22 @@ export default function HomeScreen({ navigation }: any) {
           accessibilityRole="button"
           accessibilityLabel="Read daily reflection in the Quran"
           onPress={() => openQuran('1')}
-          style={styles.verseCard}
+          style={[
+            styles.verseCard,
+            isDark ? styles.warmCardDark : styles.warmCardLight,
+          ]}
         >
           <Text style={styles.verseLabel}>DAILY REFLECTION</Text>
-          <Text style={styles.arabic}>فَإِنَّ مَعَ الْعُسْرِ يُسْرًا</Text>
-          <Text style={styles.translation}>
+          <Text style={[styles.arabic, theme.text]}>
+            فَإِنَّ مَعَ الْعُسْرِ يُسْرًا
+          </Text>
+          <Text style={[styles.translation, theme.text]}>
             “Indeed, with hardship comes ease.”
           </Text>
           <View style={styles.verseFoot}>
-            <Text style={styles.reference}>Ash-Sharh · 94:5</Text>
+            <Text style={[styles.reference, theme.mutedText]}>
+              Ash-Sharh · 94:5
+            </Text>
             <ChevronRight size={17} color={colors.gold} />
           </View>
         </Pressable>
@@ -311,6 +330,8 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
   verseCard: { backgroundColor: '#EFE6D3', padding: 22, borderRadius: 24 },
+  warmCardLight: { backgroundColor: '#EFE6D3' },
+  warmCardDark: { backgroundColor: '#29271F' },
   verseLabel: {
     color: colors.gold,
     fontSize: 9,

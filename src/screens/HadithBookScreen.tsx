@@ -9,10 +9,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Bookmark, Share2 } from 'lucide-react-native';
-import { colors, shared } from '../components/DesignSystem';
+import {
+  colors,
+  shared,
+  useAppTheme,
+  useThemeStyles,
+} from '../components/DesignSystem';
 import { hadithCollections } from '../data/hadith';
 
 export default function HadithBookScreen({ navigation, route }: any) {
+  const { palette, isDark } = useAppTheme();
+  const theme = useThemeStyles();
   const book =
     hadithCollections.find(item => item.id === route.params?.bookId) ??
     hadithCollections[0];
@@ -27,7 +34,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
     Share.share({ message: `${translation}\n\n${book.title} · ${number}` });
 
   return (
-    <SafeAreaView style={shared.screen} edges={['top']}>
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <ScrollView
         contentContainerStyle={shared.content}
         showsVerticalScrollIndicator={false}
@@ -37,16 +44,18 @@ export default function HadithBookScreen({ navigation, route }: any) {
             accessibilityRole="button"
             accessibilityLabel="Back to Hadith library"
             onPress={() => navigation.goBack()}
-            style={styles.button}
+            style={[styles.button, theme.card]}
           >
-            <ArrowLeft size={20} color={colors.ink} />
+            <ArrowLeft size={20} color={palette.ink} />
           </Pressable>
           <View style={styles.heading}>
-            <Text style={styles.title}>{book.title}</Text>
-            <Text style={styles.subtitle}>{book.compiler}</Text>
+            <Text style={[styles.title, theme.text]}>{book.title}</Text>
+            <Text style={[styles.subtitle, theme.mutedText]}>
+              {book.compiler}
+            </Text>
           </View>
-          <View style={styles.button}>
-            <Bookmark size={19} color={colors.green} />
+          <View style={[styles.button, theme.card]}>
+            <Bookmark size={19} color={palette.green} />
           </View>
         </View>
         <View style={styles.cover}>
@@ -56,10 +65,17 @@ export default function HadithBookScreen({ navigation, route }: any) {
             {book.sizeLabel} · {book.category}
           </Text>
         </View>
-        <Text style={styles.description}>{book.description}</Text>
-        <View style={styles.previewNote}>
+        <Text style={[styles.description, theme.mutedText]}>
+          {book.description}
+        </Text>
+        <View
+          style={[
+            styles.previewNote,
+            isDark ? styles.previewNoteDark : styles.previewNoteLight,
+          ]}
+        >
           <Text style={styles.previewTitle}>READER PREVIEW</Text>
-          <Text style={styles.previewText}>
+          <Text style={[styles.previewText, theme.text]}>
             A curated preview is available offline. Full collection text can be
             connected to your preferred verified Hadith data source.
           </Text>
@@ -67,10 +83,14 @@ export default function HadithBookScreen({ navigation, route }: any) {
         {book.samples.map(hadith => {
           const isSaved = saved.includes(hadith.number);
           return (
-            <View key={hadith.number} style={styles.hadith}>
+            <View key={hadith.number} style={[styles.hadith, theme.card]}>
               <View style={styles.hadithTop}>
-                <View style={styles.number}>
-                  <Text style={styles.numberText}>{hadith.number}</Text>
+                <View
+                  style={[styles.number, { backgroundColor: palette.mint }]}
+                >
+                  <Text style={[styles.numberText, { color: palette.green }]}>
+                    {hadith.number}
+                  </Text>
                 </View>
                 <View style={styles.hadithActions}>
                   <Pressable
@@ -80,7 +100,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
                       shareHadith(hadith.translation, hadith.number)
                     }
                   >
-                    <Share2 size={18} color={colors.muted} />
+                    <Share2 size={18} color={palette.muted} />
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
@@ -91,15 +111,19 @@ export default function HadithBookScreen({ navigation, route }: any) {
                   >
                     <Bookmark
                       size={19}
-                      color={colors.gold}
-                      fill={isSaved ? colors.gold : 'transparent'}
+                      color={palette.gold}
+                      fill={isSaved ? palette.gold : 'transparent'}
                     />
                   </Pressable>
                 </View>
               </View>
-              <Text style={styles.arabic}>{hadith.arabic}</Text>
-              <Text style={styles.translation}>{hadith.translation}</Text>
-              <Text style={styles.narrator}>{hadith.narrator}</Text>
+              <Text style={[styles.arabic, theme.text]}>{hadith.arabic}</Text>
+              <Text style={[styles.translation, theme.text]}>
+                {hadith.translation}
+              </Text>
+              <Text style={[styles.narrator, theme.mutedText]}>
+                {hadith.narrator}
+              </Text>
             </View>
           );
         })}
@@ -159,6 +183,8 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 14,
   },
+  previewNoteLight: { backgroundColor: '#EFE6D3' },
+  previewNoteDark: { backgroundColor: '#29271F' },
   previewTitle: {
     color: colors.gold,
     fontSize: 9,

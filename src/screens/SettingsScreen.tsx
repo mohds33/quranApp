@@ -17,7 +17,13 @@ import {
   Moon,
   SlidersHorizontal,
 } from 'lucide-react-native';
-import { colors, ScreenTitle, shared } from '../components/DesignSystem';
+import {
+  colors,
+  ScreenTitle,
+  shared,
+  useAppTheme,
+  useThemeStyles,
+} from '../components/DesignSystem';
 
 type SettingKey = 'location' | 'method' | 'translation';
 const options: Record<SettingKey, { title: string; values: string[] }> = {
@@ -36,13 +42,14 @@ const options: Record<SettingKey, { title: string; values: string[] }> = {
 };
 
 export default function SettingsScreen() {
+  const { isDark, setDarkMode, palette } = useAppTheme();
+  const theme = useThemeStyles();
   const [settings, setSettings] = useState({
     location: 'Calgary, Alberta',
     method: 'ISNA',
     translation: 'The Clear Quran',
   });
   const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
   const rows = [
     { Icon: MapPin, key: 'location' as const, title: 'Location' },
     {
@@ -62,80 +69,72 @@ export default function SettingsScreen() {
     ]);
 
   return (
-    <SafeAreaView
-      style={[shared.screen, darkMode && styles.darkScreen]}
-      edges={['top']}
-    >
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <ScrollView contentContainerStyle={shared.content}>
         <ScreenTitle title="Settings" subtitle="Make the experience yours" />
-        <Text style={styles.section}>PREFERENCES</Text>
-        <View style={[styles.group, darkMode && styles.darkGroup]}>
+        <Text style={[styles.section, theme.mutedText]}>PREFERENCES</Text>
+        <View style={[styles.group, theme.card]}>
           {rows.map(({ Icon, key, title }) => (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Change ${title}`}
               onPress={() => choose(key)}
               key={key}
-              style={styles.row}
+              style={[styles.row, theme.border]}
             >
-              <View style={styles.icon}>
-                <Icon size={19} color={colors.green} />
+              <View style={[styles.icon, { backgroundColor: palette.mint }]}>
+                <Icon size={19} color={palette.green} />
               </View>
               <View style={styles.copy}>
-                <Text style={[styles.title, darkMode && styles.darkText]}>
-                  {title}
+                <Text style={[styles.title, theme.text]}>{title}</Text>
+                <Text style={[styles.value, theme.mutedText]}>
+                  {settings[key]}
                 </Text>
-                <Text style={styles.value}>{settings[key]}</Text>
               </View>
-              <ChevronRight size={18} color={colors.muted} />
+              <ChevronRight size={18} color={palette.muted} />
             </Pressable>
           ))}
         </View>
-        <Text style={styles.section}>APP</Text>
-        <View style={[styles.group, darkMode && styles.darkGroup]}>
-          <View style={styles.row}>
-            <View style={styles.icon}>
-              <Bell size={19} color={colors.green} />
+        <Text style={[styles.section, theme.mutedText]}>APP</Text>
+        <View style={[styles.group, theme.card]}>
+          <View style={[styles.row, theme.border]}>
+            <View style={[styles.icon, { backgroundColor: palette.mint }]}>
+              <Bell size={19} color={palette.green} />
             </View>
-            <Text
-              style={[styles.title, styles.copy, darkMode && styles.darkText]}
-            >
+            <Text style={[styles.title, styles.copy, theme.text]}>
               Prayer notifications
             </Text>
             <Switch
               accessibilityLabel="Prayer notifications"
               value={notifications}
               onValueChange={setNotifications}
-              trackColor={{ true: colors.green, false: colors.line }}
+              trackColor={{ true: palette.green, false: palette.line }}
             />
           </View>
-          <View style={styles.row}>
-            <View style={styles.icon}>
-              <Moon size={19} color={colors.green} />
+          <View style={[styles.row, theme.border]}>
+            <View style={[styles.icon, { backgroundColor: palette.mint }]}>
+              <Moon size={19} color={palette.green} />
             </View>
-            <Text
-              style={[styles.title, styles.copy, darkMode && styles.darkText]}
-            >
+            <Text style={[styles.title, styles.copy, theme.text]}>
               Dark appearance
             </Text>
             <Switch
               accessibilityLabel="Dark appearance"
-              value={darkMode}
+              value={isDark}
               onValueChange={setDarkMode}
-              trackColor={{ true: colors.green, false: colors.line }}
+              trackColor={{ true: palette.green, false: palette.line }}
             />
           </View>
         </View>
-        <Text style={styles.footer}>Sakinah · Version 1.0</Text>
+        <Text style={[styles.footer, theme.mutedText]}>
+          Sakinah · Version 1.0
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  darkScreen: { backgroundColor: '#12201D' },
-  darkGroup: { backgroundColor: '#1B2E29', borderColor: '#2A403A' },
-  darkText: { color: '#F4F3EC' },
   section: {
     color: colors.muted,
     fontSize: 10,

@@ -2,10 +2,17 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Bookmark, Pause, Play } from 'lucide-react-native';
-import { colors, shared } from '../components/DesignSystem';
+import {
+  colors,
+  shared,
+  useAppTheme,
+  useThemeStyles,
+} from '../components/DesignSystem';
 import { surahs } from '../data/quran';
 
 export default function SurahDetailScreen({ navigation, route }: any) {
+  const { palette } = useAppTheme();
+  const theme = useThemeStyles();
   const surah =
     surahs.find(item => item.number === route.params?.surahNumber) ?? surahs[0];
   const [playing, setPlaying] = useState(false);
@@ -18,20 +25,20 @@ export default function SurahDetailScreen({ navigation, route }: any) {
     );
 
   return (
-    <SafeAreaView style={shared.screen} edges={['top']}>
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <ScrollView contentContainerStyle={shared.content}>
         <View style={styles.top}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to Quran"
             onPress={() => navigation.goBack()}
-            style={styles.button}
+            style={[styles.button, theme.card]}
           >
-            <ArrowLeft size={20} color={colors.ink} />
+            <ArrowLeft size={20} color={palette.ink} />
           </Pressable>
           <View style={styles.heading}>
-            <Text style={styles.title}>{surah.name}</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, theme.text]}>{surah.name}</Text>
+            <Text style={[styles.subtitle, theme.mutedText]}>
               {surah.meaning} · {surah.verseCount} verses
             </Text>
           </View>
@@ -41,12 +48,12 @@ export default function SurahDetailScreen({ navigation, route }: any) {
               playing ? 'Pause recitation' : 'Play recitation'
             }
             onPress={() => setPlaying(value => !value)}
-            style={[styles.button, playing && styles.buttonActive]}
+            style={[styles.button, theme.card, playing && styles.buttonActive]}
           >
             {playing ? (
               <Pause size={19} fill={colors.white} color={colors.white} />
             ) : (
-              <Play size={19} color={colors.green} />
+              <Play size={19} color={palette.green} />
             )}
           </Pressable>
         </View>
@@ -61,10 +68,14 @@ export default function SurahDetailScreen({ navigation, route }: any) {
         {surah.ayahs.map(ayah => {
           const saved = bookmarks.includes(ayah.number);
           return (
-            <View key={ayah.number} style={styles.ayah}>
+            <View key={ayah.number} style={[styles.ayah, theme.card]}>
               <View style={styles.ayahTop}>
-                <View style={styles.number}>
-                  <Text style={styles.numberText}>{ayah.number}</Text>
+                <View
+                  style={[styles.number, { backgroundColor: palette.mint }]}
+                >
+                  <Text style={[styles.numberText, { color: palette.green }]}>
+                    {ayah.number}
+                  </Text>
                 </View>
                 <Pressable
                   accessibilityRole="button"
@@ -77,13 +88,15 @@ export default function SurahDetailScreen({ navigation, route }: any) {
                 >
                   <Bookmark
                     size={19}
-                    color={colors.gold}
-                    fill={saved ? colors.gold : 'transparent'}
+                    color={palette.gold}
+                    fill={saved ? palette.gold : 'transparent'}
                   />
                 </Pressable>
               </View>
-              <Text style={styles.arabic}>{ayah.arabic}</Text>
-              <Text style={styles.english}>{ayah.translation}</Text>
+              <Text style={[styles.arabic, theme.text]}>{ayah.arabic}</Text>
+              <Text style={[styles.english, theme.mutedText]}>
+                {ayah.translation}
+              </Text>
             </View>
           );
         })}

@@ -10,20 +10,23 @@ import {
   BookOpen,
   Heart,
   LibraryBig,
+  MapPinned,
   Settings,
 } from 'lucide-react-native';
-import { colors } from '../components/DesignSystem';
+import { useAppTheme } from '../components/DesignSystem';
 
 const ICONS = {
   Home: Home,
   Prayer: Clock3,
   Quran: BookOpen,
   Hadith: LibraryBig,
+  Mosques: MapPinned,
   Duas: Heart,
   Settings: Settings,
 };
 
 function TabButton({ route, isFocused, onPress }: any) {
+  const { palette } = useAppTheme();
   const Icon = ICONS[route.name as keyof typeof ICONS];
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -34,11 +37,16 @@ function TabButton({ route, isFocused, onPress }: any) {
     <Pressable onPress={onPress} style={styles.tabButton}>
       <Animated.View style={animatedStyle}>
         <Icon
-          size={22}
-          color={isFocused ? colors.green : '#9AA39F'}
+          size={20}
+          color={isFocused ? palette.green : palette.muted}
           strokeWidth={isFocused ? 2.5 : 2}
         />
-        <Text style={[styles.label, isFocused && styles.labelActive]}>
+        <Text
+          style={[
+            styles.label,
+            { color: isFocused ? palette.green : palette.muted },
+          ]}
+        >
           {route.name}
         </Text>
       </Animated.View>
@@ -47,9 +55,15 @@ function TabButton({ route, isFocused, onPress }: any) {
 }
 
 export default function CustomTabBar({ state, navigation }: any) {
+  const { palette } = useAppTheme();
   return (
     <View style={styles.container}>
-      <View style={styles.pill}>
+      <View
+        style={[
+          styles.pill,
+          { backgroundColor: palette.white, borderColor: palette.line },
+        ]}
+      >
         {state.routes.map((route: any, index: number) => {
           const isFocused = state.index === index;
 
@@ -89,9 +103,10 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     backgroundColor: '#ffffff',
+    borderWidth: 1,
     borderRadius: 26,
     paddingVertical: 11,
-    paddingHorizontal: 13,
+    paddingHorizontal: 9,
     justifyContent: 'space-between',
     width: '100%',
     shadowColor: '#000',
@@ -104,6 +119,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: { color: '#9AA39F', fontSize: 8, fontWeight: '600', marginTop: 3 },
-  labelActive: { color: colors.green },
+  label: { color: '#9AA39F', fontSize: 7, fontWeight: '600', marginTop: 3 },
 });

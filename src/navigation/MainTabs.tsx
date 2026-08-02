@@ -6,6 +6,7 @@ import HomeScreen from '../screens/HomeScreen';
 import PrayerTimesScreen from '../screens/PrayerTimesScreen';
 import QuranStack from './QuranStack';
 import HadithStack from './HadithStack';
+import MosqueStack from './MosqueStack';
 import DuasScreen from '../screens/DuasScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
@@ -19,6 +20,7 @@ export default function MainTabs() {
       <Tab.Screen name="Prayer" component={PrayerTimesScreen} />
       <Tab.Screen name="Quran" component={QuranStack} />
       <Tab.Screen name="Hadith" component={HadithStack} />
+      <Tab.Screen name="Mosques" component={MosqueStack} />
       <Tab.Screen name="Duas" component={DuasScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>

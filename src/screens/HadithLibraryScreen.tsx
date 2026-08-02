@@ -15,7 +15,13 @@ import {
   Search,
   X,
 } from 'lucide-react-native';
-import { colors, ScreenTitle, shared } from '../components/DesignSystem';
+import {
+  colors,
+  ScreenTitle,
+  shared,
+  useAppTheme,
+  useThemeStyles,
+} from '../components/DesignSystem';
 import { HadithCategory, hadithCollections } from '../data/hadith';
 
 const filters: Array<'All' | HadithCategory> = [
@@ -26,6 +32,8 @@ const filters: Array<'All' | HadithCategory> = [
 ];
 
 export default function HadithLibraryScreen({ navigation }: any) {
+  const { palette } = useAppTheme();
+  const theme = useThemeStyles();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<(typeof filters)[number]>('All');
   const [savedOnly, setSavedOnly] = useState(false);
@@ -54,7 +62,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
     );
 
   return (
-    <SafeAreaView style={shared.screen} edges={['top']}>
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <ScrollView
         contentContainerStyle={shared.content}
         keyboardShouldPersistTaps="handled"
@@ -69,11 +77,15 @@ export default function HadithLibraryScreen({ navigation }: any) {
             accessibilityRole="button"
             accessibilityLabel="Show saved Hadith books"
             onPress={() => setSavedOnly(value => !value)}
-            style={[styles.savedButton, savedOnly && styles.savedButtonActive]}
+            style={[
+              styles.savedButton,
+              theme.card,
+              savedOnly && styles.savedButtonActive,
+            ]}
           >
             <Bookmark
               size={20}
-              color={savedOnly ? colors.white : colors.green}
+              color={savedOnly ? colors.white : palette.green}
               fill={savedOnly ? colors.white : 'transparent'}
             />
           </Pressable>
@@ -90,15 +102,15 @@ export default function HadithLibraryScreen({ navigation }: any) {
           <Text style={styles.heroArabic}>الحديث</Text>
         </View>
 
-        <View style={styles.search}>
-          <Search size={19} color={colors.muted} />
+        <View style={[styles.search, theme.card]}>
+          <Search size={19} color={palette.muted} />
           <TextInput
             accessibilityLabel="Search Hadith books"
             value={query}
             onChangeText={setQuery}
             placeholder="Search books or compilers"
-            placeholderTextColor={colors.muted}
-            style={styles.input}
+            placeholderTextColor={palette.muted}
+            style={[styles.input, theme.text]}
             returnKeyType="search"
           />
           {query ? (
@@ -107,7 +119,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
               accessibilityLabel="Clear search"
               onPress={() => setQuery('')}
             >
-              <X size={18} color={colors.muted} />
+              <X size={18} color={palette.muted} />
             </Pressable>
           ) : null}
         </View>
@@ -123,11 +135,16 @@ export default function HadithLibraryScreen({ navigation }: any) {
               accessibilityLabel={`Filter by ${item}`}
               key={item}
               onPress={() => setFilter(item)}
-              style={[styles.filter, filter === item && styles.filterActive]}
+              style={[
+                styles.filter,
+                theme.card,
+                filter === item && styles.filterActive,
+              ]}
             >
               <Text
                 style={[
                   styles.filterText,
+                  filter !== item && theme.mutedText,
                   filter === item && styles.filterTextActive,
                 ]}
               >
@@ -137,10 +154,10 @@ export default function HadithLibraryScreen({ navigation }: any) {
           ))}
         </ScrollView>
 
-        <Text style={styles.section}>
+        <Text style={[styles.section, theme.mutedText]}>
           {savedOnly ? 'SAVED COLLECTIONS' : `${results.length} COLLECTIONS`}
         </Text>
-        <View style={styles.list}>
+        <View style={[styles.list, theme.card]}>
           {results.map(book => {
             const saved = savedBooks.includes(book.id);
             return (
@@ -151,22 +168,26 @@ export default function HadithLibraryScreen({ navigation }: any) {
                 onPress={() =>
                   navigation.navigate('HadithBook', { bookId: book.id })
                 }
-                style={styles.row}
+                style={[styles.row, theme.border]}
               >
-                <View style={styles.monogram}>
-                  <Text style={styles.monogramText}>
+                <View
+                  style={[styles.monogram, { backgroundColor: palette.mint }]}
+                >
+                  <Text style={[styles.monogramText, { color: palette.green }]}>
                     {book.title.slice(0, 1)}
                   </Text>
                 </View>
                 <View style={styles.copy}>
-                  <Text style={styles.title}>{book.title}</Text>
-                  <Text style={styles.meta}>
+                  <Text style={[styles.title, theme.text]}>{book.title}</Text>
+                  <Text style={[styles.meta, theme.mutedText]}>
                     {book.compiler} · {book.sizeLabel}
                   </Text>
                   <Text style={styles.category}>{book.category}</Text>
                 </View>
                 <View style={styles.right}>
-                  <Text style={styles.arabic}>{book.arabicTitle}</Text>
+                  <Text style={[styles.arabic, theme.text]}>
+                    {book.arabicTitle}
+                  </Text>
                   <View style={styles.actions}>
                     <Pressable
                       accessibilityRole="button"
@@ -187,14 +208,16 @@ export default function HadithLibraryScreen({ navigation }: any) {
                         fill={saved ? colors.gold : 'transparent'}
                       />
                     </Pressable>
-                    <ChevronRight size={16} color={colors.muted} />
+                    <ChevronRight size={16} color={palette.muted} />
                   </View>
                 </View>
               </Pressable>
             );
           })}
           {!results.length ? (
-            <Text style={styles.empty}>No collections match your search.</Text>
+            <Text style={[styles.empty, theme.mutedText]}>
+              No collections match your search.
+            </Text>
           ) : null}
         </View>
       </ScrollView>
