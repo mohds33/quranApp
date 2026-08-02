@@ -8,9 +8,9 @@ const Stack = createNativeStackNavigator();
 
 export default function QuranStack() {
   return (
-    <Stack.Navigator>
-      <Stack.Screen name="SurahList" component={SurahListScreen} options={{ title: 'Quran' }} />
-      <Stack.Screen name="SurahDetail" component={SurahDetailScreen} options={{ title: 'Surah' }} />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="SurahList" component={SurahListScreen} />
+      <Stack.Screen name="SurahDetail" component={SurahDetailScreen} />
     </Stack.Navigator>
   );
 }

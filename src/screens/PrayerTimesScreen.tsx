@@ -1,10 +1,112 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Bell, Check, MapPin } from 'lucide-react-native';
+import { colors, ScreenTitle, shared } from '../components/DesignSystem';
+
+const prayers = [
+  ['Fajr', '4:06 AM'],
+  ['Sunrise', '5:48 AM'],
+  ['Dhuhr', '1:38 PM'],
+  ['Asr', '5:50 PM'],
+  ['Maghrib', '9:18 PM'],
+  ['Isha', '10:51 PM'],
+];
 
 export default function PrayerTimesScreen() {
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <Text>Prayer Times Screen</Text>
-    </View>
+    <SafeAreaView style={shared.screen} edges={['top']}>
+      <ScrollView contentContainerStyle={shared.content}>
+        <ScreenTitle
+          title="Prayer times"
+          subtitle="Saturday, August 1 · 18 Muharram 1448"
+        />
+        <View style={styles.location}>
+          <MapPin size={16} color={colors.green} />
+          <Text style={styles.locationText}>Calgary, Alberta</Text>
+          <Text style={styles.method}>ISNA</Text>
+        </View>
+        <View style={styles.list}>
+          {prayers.map(([name, time], i) => {
+            const active = name === 'Maghrib';
+            return (
+              <View key={name} style={[styles.row, active && styles.active]}>
+                <View style={[styles.dot, i < 4 && styles.dotDone]}>
+                  {i < 4 ? <Check size={10} color={colors.white} /> : null}
+                </View>
+                <View style={styles.copy}>
+                  <Text style={[styles.name, active && styles.activeText]}>
+                    {name}
+                  </Text>
+                  {active ? (
+                    <Text style={styles.next}>NEXT · IN 1 HR 24 MIN</Text>
+                  ) : null}
+                </View>
+                <Text style={[styles.time, active && styles.activeText]}>
+                  {time}
+                </Text>
+                <Bell size={17} color={active ? colors.white : colors.muted} />
+              </View>
+            );
+          })}
+        </View>
+        <Text style={styles.note}>
+          Times are calculated using your current location. You can change the
+          calculation method in Settings.
+        </Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  location: {
+    ...shared.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    marginBottom: 18,
+    gap: 8,
+  },
+  locationText: { color: colors.ink, fontWeight: '600', flex: 1 },
+  method: { color: colors.gold, fontSize: 11, fontWeight: '800' },
+  list: { ...shared.card, overflow: 'hidden' },
+  row: {
+    height: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    gap: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  active: { backgroundColor: colors.green },
+  dot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotDone: { backgroundColor: colors.gold, borderColor: colors.gold },
+  copy: { flex: 1 },
+  name: { color: colors.ink, fontSize: 16, fontWeight: '600' },
+  activeText: { color: colors.white },
+  next: {
+    fontSize: 8,
+    color: '#D8E7E1',
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginTop: 4,
+  },
+  time: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  note: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    margin: 22,
+  },
+});

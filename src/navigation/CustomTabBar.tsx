@@ -1,11 +1,15 @@
 import React from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { Home, Clock, BookOpen, Heart, Settings } from 'lucide-react-native';
+import { View, Pressable, StyleSheet, Text } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
+import { Home, Clock3, BookOpen, Heart, Settings } from 'lucide-react-native';
+import { colors } from '../components/DesignSystem';
 
 const ICONS = {
   Home: Home,
-  Prayer: Clock,
+  Prayer: Clock3,
   Quran: BookOpen,
   Duas: Heart,
   Settings: Settings,
@@ -23,9 +27,12 @@ function TabButton({ route, isFocused, onPress }: any) {
       <Animated.View style={animatedStyle}>
         <Icon
           size={24}
-          color={isFocused ? '#1a1a1a' : '#a0a0a0'}
+          color={isFocused ? colors.green : '#9AA39F'}
           strokeWidth={isFocused ? 2.5 : 2}
         />
+        <Text style={[styles.label, isFocused && styles.labelActive]}>
+          {route.name}
+        </Text>
       </Animated.View>
     </Pressable>
   );
@@ -66,27 +73,29 @@ export default function CustomTabBar({ state, navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 30,
-    left: 20,
-    right: 20,
+    bottom: 18,
+    left: 18,
+    right: 18,
     alignItems: 'center',
   },
   pill: {
     flexDirection: 'row',
     backgroundColor: '#ffffff',
-    borderRadius: 32,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    borderRadius: 26,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
     justifyContent: 'space-between',
     width: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
     elevation: 8,
   },
   tabButton: {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  label: { color: '#9AA39F', fontSize: 9, fontWeight: '600', marginTop: 3 },
+  labelActive: { color: colors.green },
 });
