@@ -32,6 +32,8 @@ import {
   PublishedMosquePrayerSchedule,
 } from '../services/prayerTimes';
 
+import { isNil } from 'lodash';
+
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat(undefined, {
     weekday: 'long',
@@ -44,7 +46,7 @@ function formatDate(date: Date) {
 export default function PrayerTimesScreen({ navigation }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { selectedMosque } = useSelectedMosque();
+  const { selectedMosque, findingClosestMosque, closestMosqueError } = useSelectedMosque();  
   const [schedule, setSchedule] =
     useState<PublishedMosquePrayerSchedule | null>(null);
   const [reminders, setReminders] = useState<string[]>(['Fajr', 'Maghrib']);
@@ -52,6 +54,10 @@ export default function PrayerTimesScreen({ navigation }: any) {
   const [error, setError] = useState('');
 
   const loadPrayerTimes = useCallback(async () => {
+    if (!selectedMosque) {
+      
+      return setError('No mosque selected. Please select a mosque to view prayer times.');
+    } 
     setLoading(true);
     setError('');
     setSchedule(null);
@@ -83,6 +89,10 @@ export default function PrayerTimesScreen({ navigation }: any) {
   const openSource = () => {
     if (sourceUrl) Linking.openURL(sourceUrl);
   };
+
+  if (isNil(selectedMosque)) {
+    return (<Text>No mosque selected.</Text>);
+  }
 
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>

@@ -52,13 +52,18 @@ export function SelectedMosqueProvider({
     fetchNearbyMosques(activeLocation, 30000)
       .then(mosques => {
         if (!active) return;
-        const closest = mosques[0] ?? null;
-        setSelectedMosque(closest);
-        if (!closest) setClosestMosqueError('No nearby masjid was found.');
+        const closest = mosques[0];
+        if (closest) {
+          selectMosque(closest);
+        } else {
+          selectMosque(DEFAULT_SELECTED_MOSQUE);
+          setClosestMosqueError('No nearby masjid was found, Showing default masjid instead.');
+        }
       })
       .catch(() => {
         if (active) {
-          setClosestMosqueError('Nearby mosque search is unavailable.');
+          selectMosque(DEFAULT_SELECTED_MOSQUE);
+          setClosestMosqueError('Nearby mosque search is unavailable - Showing default masjid instead.');
         }
       })
       .finally(() => {
