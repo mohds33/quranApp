@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect ,useState } from 'react';
 import {
   View,
   Text,
@@ -24,13 +24,48 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
+import { useSelectedMosque } from '../components/SelectedMosqueContext';
+import { calculatePrayerSchedule, calculateQiblaDirection, prayerNames } from '../services/prayerTimes';
+import type { DailyPrayerSchedule } from '../services/prayerTimes';
+
+function getNextPrayer(schedule: DailyPrayerSchedule, now: Date) {
+  const upcoming = prayerNames
+    .map(name => ({ name, date: schedule.dates[name] }))
+    .find(entry => entry.date > now);
+  return upcoming ?? { name: 'Fajr', date: schedule.dates.Fajr }; // wraps to tomorrow's Fajr conceptually
+}
+
+function formatCountdown(target: Date, now: Date) {
+  const diffMs = target.getTime() - now.getTime();
+  const totalMinutes = Math.max(0, Math.round(diffMs / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `in ${minutes} min`;
+  return `in ${hours} hr ${minutes} min`;
+}
+
+
 
 export default function HomeScreen({ navigation }: any) {
   const { palette, isDark } = useAppTheme();
   const theme = useThemeStyles();
+  const { selectedMosque, findingClosestMosque } = useSelectedMosque();
   const [playing, setPlaying] = useState(false);
   const [notifications, setNotifications] = useState(true);
+  const [schedule, setSchedule] = useState<DailyPrayerSchedule | null>(null);
+  const [now, setNow] = useState(new Date());
 
+  useEffect(() => {
+    if (!selectedMosque) return;
+    setSchedule(calculatePrayerSchedule(selectedMosque));
+  }, [selectedMosque]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30000); //updates every 30 secondss
+    return () => clearInterval(interval);
+  }, []);
+  
+  
   const openQuran = (surahNumber = '2') => {
     navigation.navigate('Quran', {
       screen: 'SurahDetail',
@@ -50,7 +85,9 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.location}>
               <MapPin size={13} color={palette.muted} />
               <Text style={[styles.locationText, theme.mutedText]}>
-                Calgary, Alberta
+                {findingClosestMosque? 
+                'Finding closest masjid...' 
+                : selectedMosque?.name ?? 'No masjid selected'}
               </Text>
             </View>
           </View>
@@ -70,57 +107,63 @@ export default function HomeScreen({ navigation }: any) {
         </View>
 
         <Pressable
+  accessibilityRole="button"
+  accessibilityLabel="View full prayer schedule"
+  onPress={() => navigation.navigate('Prayer')}
+  style={styles.hero}
+>
+  <View style={styles.orbitOne} />
+  <View style={styles.orbitTwo} />
+  <Eyebrow>Next prayer</Eyebrow>
+  {schedule ? (
+    <>
+      <Text style={styles.prayerName}>{getNextPrayer(schedule, now).name}</Text>
+      <Text style={styles.prayerTime}>
+        {schedule.timings[getNextPrayer(schedule, now).name]}
+      </Text>
+      <View style={styles.heroFooter}>
+        <Text style={styles.countdown}>
+          {formatCountdown(getNextPrayer(schedule, now).date, now)}
+        </Text>
+        <Pressable
           accessibilityRole="button"
-          accessibilityLabel="View full prayer schedule"
-          onPress={() => navigation.navigate('Prayer')}
-          style={styles.hero}
+          accessibilityLabel="Show Qibla direction"
+          onPress={event => {
+            event.stopPropagation();
+            const qibla = selectedMosque ? calculateQiblaDirection(selectedMosque) : null;
+            Alert.alert(
+              'Qibla direction',
+              qibla ? `Face ${Math.round(qibla)}°.` : 'Location unavailable.',
+            );
+          }}
+          style={styles.qibla}
         >
-          <View style={styles.orbitOne} />
-          <View style={styles.orbitTwo} />
-          <Eyebrow>Next prayer</Eyebrow>
-          <Text style={styles.prayerName}>Maghrib</Text>
-          <Text style={styles.prayerTime}>
-            9:18 <Text style={styles.period}>PM</Text>
+          <Compass size={15} color={colors.white} />
+          <Text style={styles.qiblaText}>
+            {selectedMosque ? `Qibla ${Math.round(calculateQiblaDirection(selectedMosque))}°` : 'Qibla —'}
           </Text>
-          <View style={styles.heroFooter}>
-            <Text style={styles.countdown}>in 1 hr 24 min</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Show Qibla direction"
-              onPress={event => {
-                event.stopPropagation();
-                Alert.alert(
-                  'Qibla direction',
-                  'Face 42° north-east from Calgary.',
-                );
-              }}
-              style={styles.qibla}
-            >
-              <Compass size={15} color={colors.white} />
-              <Text style={styles.qiblaText}>Qibla 42°</Text>
-            </Pressable>
-          </View>
         </Pressable>
+      </View>
+    </>
+  ) : (
+    <Text style={styles.prayerName}>Loading…</Text>
+  )}
+</Pressable>
 
-        <View style={styles.sectionHead}>
-          <Text style={[styles.sectionTitle, theme.text]}>Today’s prayers</Text>
-          <Text style={[styles.date, theme.mutedText]}>18 Muharram</Text>
-        </View>
-        <View style={styles.times}>
-          {[
-            ['Fajr', '4:06 AM'],
-            ['Sunrise', '5:48 AM'],
-            ['Dhuhr', '1:38 PM'],
-            ['Asr', '5:50 PM'],
-            ['Maghrib', '9:18 PM'],
-            ['Isha', '10:51 PM'],
-          ].map(([name, time]) => (
-            <View key={name} style={styles.timeItem}>
-              <Text style={[styles.timeName, theme.mutedText]}>{name}</Text>
-              <Text style={[styles.timeValue, theme.text]}>{time}</Text>
-            </View>
-          ))}
-        </View>
+       <View style={styles.sectionHead}>
+  <Text style={[styles.sectionTitle, theme.text]}>Today's prayers</Text>
+  <Text style={[styles.date, theme.mutedText]}>{schedule?.hijriDate ?? ''}</Text>
+</View>
+<View style={styles.times}>
+  {prayerNames.map(name => (
+    <View key={name} style={styles.timeItem}>
+      <Text style={[styles.timeName, theme.mutedText]}>{name}</Text>
+      <Text style={[styles.timeValue, theme.text]}>
+        {schedule?.timings[name] ?? '—'}
+      </Text>
+    </View>
+  ))}
+</View>
 
         <Pressable
           accessibilityRole="button"

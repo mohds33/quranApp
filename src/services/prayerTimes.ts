@@ -10,6 +10,11 @@ import NativeAppleMapsSearch from '../../specs/NativeAppleMapsSearch';
 import { distanceKm } from './mosques';
 import type { Coordinates, Mosque } from './mosques';
 
+
+// Maybe if I had like a radius of 30km, I could find the closest mosque and then use that to get the prayer times. 
+// and it'll be more or less generalized times for that rough area. That way if we get a specific mosque but no prayer times
+// we can stil get prayer times for that area.
+
 export const prayerNames = [
   'Fajr',
   'Sunrise',
