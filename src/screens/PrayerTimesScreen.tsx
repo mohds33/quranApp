@@ -46,7 +46,7 @@ function formatDate(date: Date) {
 export default function PrayerTimesScreen({ navigation }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { selectedMosque, findingClosestMosque, closestMosqueError } = useSelectedMosque();  
+  const { selectedMosque } = useSelectedMosque();
   const [schedule, setSchedule] =
     useState<PublishedMosquePrayerSchedule | null>(null);
   const [reminders, setReminders] = useState<string[]>(['Fajr', 'Maghrib']);
@@ -55,9 +55,8 @@ export default function PrayerTimesScreen({ navigation }: any) {
 
   const loadPrayerTimes = useCallback(async () => {
     if (!selectedMosque) {
-      
       return setError('No mosque selected. Please select a mosque to view prayer times.');
-    } 
+    }
     setLoading(true);
     setError('');
     setSchedule(null);
