@@ -170,24 +170,22 @@ export default function HadithLibraryScreen({ navigation }: any) {
                 }
                 style={[styles.row, theme.border]}
               >
-                <View
-                  style={[styles.monogram, { backgroundColor: palette.mint }]}
-                >
-                  <Text style={[styles.monogramText, { color: palette.green }]}>
-                    {book.title.slice(0, 1)}
-                  </Text>
-                </View>
-                <View style={styles.copy}>
-                  <Text style={[styles.title, theme.text]}>{book.title}</Text>
-                  <Text style={[styles.meta, theme.mutedText]}>
-                    {book.compiler} · {book.sizeLabel}
-                  </Text>
-                  <Text style={styles.category}>{book.category}</Text>
-                </View>
-                <View style={styles.right}>
-                  <Text style={[styles.arabic, theme.text]}>
-                    {book.arabicTitle}
-                  </Text>
+                <View style={styles.rowTop}>
+                  <View
+                    style={[styles.monogram, { backgroundColor: palette.mint }]}
+                  >
+                    <Text
+                      style={[styles.monogramText, { color: palette.green }]}
+                    >
+                      {book.title.slice(0, 1)}
+                    </Text>
+                  </View>
+                  <View style={styles.copy}>
+                    <Text style={[styles.title, theme.text]}>{book.title}</Text>
+                    <Text style={[styles.meta, theme.mutedText]}>
+                      {book.compiler}
+                    </Text>
+                  </View>
                   <View style={styles.actions}>
                     <Pressable
                       accessibilityRole="button"
@@ -210,6 +208,18 @@ export default function HadithLibraryScreen({ navigation }: any) {
                     </Pressable>
                     <ChevronRight size={16} color={palette.muted} />
                   </View>
+                </View>
+                <Text style={[styles.arabic, theme.text]}>
+                  {book.arabicTitle}
+                </Text>
+                <Text style={[styles.description, theme.mutedText]}>
+                  {book.description}
+                </Text>
+                <View style={styles.metaRow}>
+                  <Text style={[styles.pill, { color: palette.green }]}>
+                    {book.sizeLabel}
+                  </Text>
+                  <Text style={styles.category}>{book.category}</Text>
                 </View>
               </Pressable>
             );
@@ -277,14 +287,11 @@ const styles = StyleSheet.create({
   },
   list: { ...shared.card, overflow: 'hidden' },
   row: {
-    minHeight: 96,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 12,
+    padding: 15,
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   monogram: {
     width: 42,
     height: 48,
@@ -297,20 +304,44 @@ const styles = StyleSheet.create({
   copy: { flex: 1 },
   title: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   meta: { color: colors.muted, fontSize: 9, marginTop: 4 },
+  description: {
+    color: colors.muted,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 9,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 11,
+  },
+  pill: {
+    backgroundColor: colors.mint,
+    borderRadius: 13,
+    color: colors.green,
+    fontSize: 9,
+    fontWeight: '800',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   category: {
     color: colors.gold,
     fontSize: 8,
     fontWeight: '800',
     letterSpacing: 0.7,
-    marginTop: 5,
     textTransform: 'uppercase',
   },
-  right: {
-    alignItems: 'flex-end',
-    alignSelf: 'stretch',
-    justifyContent: 'space-between',
+  arabic: {
+    color: colors.ink,
+    fontSize: 21,
+    lineHeight: 34,
+    marginTop: 13,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
-  arabic: { color: colors.ink, fontSize: 15 },
   actions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   empty: { color: colors.muted, padding: 28, textAlign: 'center' },
 });

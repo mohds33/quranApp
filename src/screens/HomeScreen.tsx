@@ -1,4 +1,4 @@
-import React, { useEffect ,useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,15 +6,14 @@ import {
   StyleSheet,
   Pressable,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  Bell,
   BookOpen,
   ChevronRight,
   Compass,
   MapPin,
-  Pause,
   Play,
 } from 'lucide-react-native';
 import {
@@ -25,15 +24,16 @@ import {
   useThemeStyles,
 } from '../components/DesignSystem';
 import { useSelectedMosque } from '../components/SelectedMosqueContext';
-import { calculatePrayerSchedule, calculateQiblaDirection, prayerNames } from '../services/prayerTimes';
+import {
+  calculatePrayerSchedule,
+  calculateQiblaDirection,
+  getNextPrayerOccurrence,
+  prayerNames,
+} from '../services/prayerTimes';
 import type { DailyPrayerSchedule } from '../services/prayerTimes';
-
-function getNextPrayer(schedule: DailyPrayerSchedule, now: Date) {
-  const upcoming = prayerNames
-    .map(name => ({ name, date: schedule.dates[name] }))
-    .find(entry => entry.date > now);
-  return upcoming ?? { name: 'Fajr', date: schedule.dates.Fajr }; // wraps to tomorrow's Fajr conceptually
-}
+import { getAyahRecitationUrl } from '../services/quranAudio';
+import { useAppPreferences } from '../components/AppPreferencesContext';
+import { getHadithSampleTranslation, hadithCollections } from '../data/hadith';
 
 function formatCountdown(target: Date, now: Date) {
   const diffMs = target.getTime() - now.getTime();
@@ -44,34 +44,67 @@ function formatCountdown(target: Date, now: Date) {
   return `in ${hours} hr ${minutes} min`;
 }
 
-
+function dailyHadith(date: Date) {
+  const shortHadiths = hadithCollections
+    .flatMap(collection =>
+      collection.samples.map(sample => ({ collection, sample })),
+    )
+    .filter(
+      (entry, index, entries) =>
+        entry.sample.translation.trim().split(/\s+/).length <= 30 &&
+        entries.findIndex(
+          candidate => candidate.sample.arabic === entry.sample.arabic,
+        ) === index,
+    );
+  const dayNumber = Math.floor(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000,
+  );
+  return shortHadiths[dayNumber % shortHadiths.length];
+}
 
 export default function HomeScreen({ navigation }: any) {
   const { palette, isDark } = useAppTheme();
   const theme = useThemeStyles();
   const { selectedMosque, findingClosestMosque } = useSelectedMosque();
-  const [playing, setPlaying] = useState(false);
-  const [notifications, setNotifications] = useState(true);
+  const { preferences } = useAppPreferences();
+  const [openingRecitation, setOpeningRecitation] = useState(false);
   const [schedule, setSchedule] = useState<DailyPrayerSchedule | null>(null);
   const [now, setNow] = useState(new Date());
-
   useEffect(() => {
     if (!selectedMosque) return;
-    setSchedule(calculatePrayerSchedule(selectedMosque));
-  }, [selectedMosque]);
+    setSchedule(calculatePrayerSchedule(selectedMosque, now));
+  }, [now, selectedMosque]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30000); //updates every 30 secondss
     return () => clearInterval(interval);
   }, []);
-  
-  
+
   const openQuran = (surahNumber = '2') => {
     navigation.navigate('Quran', {
       screen: 'SurahDetail',
       params: { surahNumber },
     });
   };
+
+  const openAyatulKursiRecitation = async () => {
+    setOpeningRecitation(true);
+    try {
+      await Linking.openURL(getAyahRecitationUrl(262));
+    } catch {
+      Alert.alert(
+        'Recitation unavailable',
+        'Could not open the Quran audio stream. Check your connection and try again.',
+      );
+    } finally {
+      setOpeningRecitation(false);
+    }
+  };
+  const nextPrayer =
+    schedule && selectedMosque
+      ? getNextPrayerOccurrence(schedule, selectedMosque, now)
+      : null;
+  const reflection = dailyHadith(now);
 
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
@@ -82,88 +115,91 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.topbar}>
           <View>
             <Text style={[styles.greeting, theme.text]}>Assalamu alaikum</Text>
+            <Text style={[styles.currentDate, theme.mutedText]}>
+              {schedule?.readableDate ??
+                new Intl.DateTimeFormat(undefined, {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                }).format(now)}
+            </Text>
             <View style={styles.location}>
               <MapPin size={13} color={palette.muted} />
               <Text style={[styles.locationText, theme.mutedText]}>
-                {findingClosestMosque? 
-                'Finding closest masjid...' 
-                : selectedMosque?.name ?? 'No masjid selected'}
+                {findingClosestMosque
+                  ? 'Finding closest masjid...'
+                  : selectedMosque?.name ?? 'No masjid selected'}
               </Text>
             </View>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Toggle prayer notifications"
-            onPress={() => setNotifications(value => !value)}
-            style={[styles.iconButton, theme.card]}
-          >
-            <Bell
-              size={20}
-              color={notifications ? palette.green : palette.muted}
-              fill={notifications ? palette.mint : 'transparent'}
-            />
-            {notifications ? <View style={styles.notificationDot} /> : null}
-          </Pressable>
         </View>
 
         <Pressable
-  accessibilityRole="button"
-  accessibilityLabel="View full prayer schedule"
-  onPress={() => navigation.navigate('Prayer')}
-  style={styles.hero}
->
-  <View style={styles.orbitOne} />
-  <View style={styles.orbitTwo} />
-  <Eyebrow>Next prayer</Eyebrow>
-  {schedule ? (
-    <>
-      <Text style={styles.prayerName}>{getNextPrayer(schedule, now).name}</Text>
-      <Text style={styles.prayerTime}>
-        {schedule.timings[getNextPrayer(schedule, now).name]}
-      </Text>
-      <View style={styles.heroFooter}>
-        <Text style={styles.countdown}>
-          {formatCountdown(getNextPrayer(schedule, now).date, now)}
-        </Text>
-        <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Show Qibla direction"
-          onPress={event => {
-            event.stopPropagation();
-            const qibla = selectedMosque ? calculateQiblaDirection(selectedMosque) : null;
-            Alert.alert(
-              'Qibla direction',
-              qibla ? `Face ${Math.round(qibla)}°.` : 'Location unavailable.',
-            );
-          }}
-          style={styles.qibla}
+          accessibilityLabel="View full prayer schedule"
+          onPress={() => navigation.navigate('Prayer')}
+          style={styles.hero}
         >
-          <Compass size={15} color={colors.white} />
-          <Text style={styles.qiblaText}>
-            {selectedMosque ? `Qibla ${Math.round(calculateQiblaDirection(selectedMosque))}°` : 'Qibla —'}
-          </Text>
+          <View style={styles.orbitOne} />
+          <View style={styles.orbitTwo} />
+          <Eyebrow>Next prayer</Eyebrow>
+          {nextPrayer ? (
+            <>
+              <Text style={styles.prayerName}>{nextPrayer.name}</Text>
+              <Text style={styles.prayerTime}>{nextPrayer.timing}</Text>
+              <View style={styles.heroFooter}>
+                <Text style={styles.countdown}>
+                  {formatCountdown(nextPrayer.date, now)}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Show Qibla direction"
+                  onPress={event => {
+                    event.stopPropagation();
+                    const qibla = selectedMosque
+                      ? calculateQiblaDirection(selectedMosque)
+                      : null;
+                    Alert.alert(
+                      'Qibla direction',
+                      qibla
+                        ? `Face ${Math.round(qibla)}°.`
+                        : 'Location unavailable.',
+                    );
+                  }}
+                  style={styles.qibla}
+                >
+                  <Compass size={15} color={colors.white} />
+                  <Text style={styles.qiblaText}>
+                    {selectedMosque
+                      ? `Qibla ${Math.round(
+                          calculateQiblaDirection(selectedMosque),
+                        )}°`
+                      : 'Qibla —'}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <Text style={styles.prayerName}>Loading…</Text>
+          )}
         </Pressable>
-      </View>
-    </>
-  ) : (
-    <Text style={styles.prayerName}>Loading…</Text>
-  )}
-</Pressable>
 
-       <View style={styles.sectionHead}>
-  <Text style={[styles.sectionTitle, theme.text]}>Today's prayers</Text>
-  <Text style={[styles.date, theme.mutedText]}>{schedule?.hijriDate ?? ''}</Text>
-</View>
-<View style={styles.times}>
-  {prayerNames.map(name => (
-    <View key={name} style={styles.timeItem}>
-      <Text style={[styles.timeName, theme.mutedText]}>{name}</Text>
-      <Text style={[styles.timeValue, theme.text]}>
-        {schedule?.timings[name] ?? '—'}
-      </Text>
-    </View>
-  ))}
-</View>
+        <View style={styles.sectionHead}>
+          <Text style={[styles.sectionTitle, theme.text]}>Today's prayers</Text>
+          <Text style={[styles.date, theme.mutedText]}>
+            {schedule?.hijriDate ?? ''}
+          </Text>
+        </View>
+        <View style={styles.times}>
+          {prayerNames.map(name => (
+            <View key={name} style={styles.timeItem}>
+              <Text style={[styles.timeName, theme.mutedText]}>{name}</Text>
+              <Text style={[styles.timeValue, theme.text]}>
+                {schedule?.timings[name] ?? '—'}
+              </Text>
+            </View>
+          ))}
+        </View>
 
         <Pressable
           accessibilityRole="button"
@@ -183,27 +219,27 @@ export default function HomeScreen({ navigation }: any) {
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={
-              playing ? 'Pause recitation' : 'Play recitation'
-            }
+            accessibilityLabel="Open Ayatul Kursi recitation"
+            disabled={openingRecitation}
             onPress={event => {
               event.stopPropagation();
-              setPlaying(value => !value);
+              openAyatulKursiRecitation();
             }}
             style={styles.play}
           >
-            {playing ? (
-              <Pause size={18} fill={colors.white} color={colors.white} />
-            ) : (
-              <Play size={18} fill={colors.white} color={colors.white} />
-            )}
+            <Play size={18} fill={colors.white} color={colors.white} />
           </Pressable>
         </Pressable>
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Read daily reflection in the Quran"
-          onPress={() => openQuran('1')}
+          accessibilityLabel={`Read ${reflection.collection.title}`}
+          onPress={() =>
+            navigation.navigate('Hadith', {
+              screen: 'HadithBook',
+              params: { bookId: reflection.collection.id },
+            })
+          }
           style={[
             styles.verseCard,
             isDark ? styles.warmCardDark : styles.warmCardLight,
@@ -211,14 +247,19 @@ export default function HomeScreen({ navigation }: any) {
         >
           <Text style={styles.verseLabel}>DAILY REFLECTION</Text>
           <Text style={[styles.arabic, theme.text]}>
-            فَإِنَّ مَعَ الْعُسْرِ يُسْرًا
+            {reflection.sample.arabic}
           </Text>
           <Text style={[styles.translation, theme.text]}>
-            “Indeed, with hardship comes ease.”
+            “
+            {getHadithSampleTranslation(
+              reflection.sample,
+              preferences.quranLanguage,
+            )}
+            ”
           </Text>
           <View style={styles.verseFoot}>
             <Text style={[styles.reference, theme.mutedText]}>
-              Ash-Sharh · 94:5
+              {reflection.collection.title} · {reflection.sample.number}
             </Text>
             <ChevronRight size={17} color={colors.gold} />
           </View>
@@ -230,9 +271,6 @@ export default function HomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   topbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 22,
   },
   greeting: {
@@ -247,24 +285,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 5,
   },
+  currentDate: { color: colors.muted, fontSize: 12, marginTop: 5 },
   locationText: { color: colors.muted, fontSize: 13 },
-  iconButton: {
-    width: 44,
-    height: 44,
-    backgroundColor: colors.white,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  notificationDot: {
-    position: 'absolute',
-    right: 10,
-    top: 9,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.gold,
-  },
   hero: {
     height: 230,
     backgroundColor: colors.green,

@@ -34,7 +34,13 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import { hadithCollections, HadithSample } from '../data/hadith';
+import {
+  getHadithSampleTranslation,
+  hadithCollections,
+  HadithSample,
+} from '../data/hadith';
+import { quranLanguageOptions } from '../data/quran';
+import { useAppPreferences } from '../components/AppPreferencesContext';
 import {
   fetchFullSahihBook,
   FullHadith,
@@ -47,6 +53,11 @@ const PAGE_SIZE = 20;
 export default function HadithBookScreen({ navigation, route }: any) {
   const { palette, isDark } = useAppTheme();
   const theme = useThemeStyles();
+  const { preferences } = useAppPreferences();
+  const activeLanguage =
+    quranLanguageOptions.find(
+      option => option.code === preferences.quranLanguage,
+    ) ?? quranLanguageOptions[0];
   const book =
     hadithCollections.find(item => item.id === route.params?.bookId) ??
     hadithCollections[0];
@@ -213,6 +224,14 @@ export default function HadithBookScreen({ navigation, route }: any) {
             </Pressable>
           </View>
         </View>
+        <View style={[styles.languageHeader, theme.border]}>
+          <Text style={[styles.languageLabel, { color: palette.green }]}>
+            Arabic
+          </Text>
+          <Text style={[styles.languageLabel, theme.mutedText]}>
+            English translation
+          </Text>
+        </View>
         <Text style={[styles.arabic, theme.text]}>{item.arabic}</Text>
         {item.english.narrator ? (
           <Text style={[styles.narratorLead, { color: palette.green }]}>
@@ -249,7 +268,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
             <Text style={[styles.previewText, theme.text]}>
               This collection currently includes a curated preview. The two
               Sahih collections contain their complete Arabic and English
-              readers.
+              readers. Preview translations follow your selected app language.
             </Text>
           </View>
           {book.samples.map(hadith => (
@@ -259,7 +278,17 @@ export default function HadithBookScreen({ navigation, route }: any) {
               isSaved={saved.includes(hadith.number)}
               key={hadith.number}
               onSave={() => toggleSaved(hadith.number)}
-              onShare={() => shareHadith(hadith.translation, hadith.number)}
+              onShare={() =>
+                shareHadith(
+                  getHadithSampleTranslation(hadith, preferences.quranLanguage),
+                  hadith.number,
+                )
+              }
+              translation={getHadithSampleTranslation(
+                hadith,
+                preferences.quranLanguage,
+              )}
+              translationLabel={`${activeLanguage.label} translation`}
             />
           ))}
         </ScrollView>
@@ -322,8 +351,8 @@ export default function HadithBookScreen({ navigation, route }: any) {
           </Text>
         </View>
         <Text style={[styles.fullText, theme.text]}>
-          Arabic and English · {fullBook.chapters.length} books · search the
-          complete collection below.
+          Arabic with English translation · {fullBook.chapters.length} books ·
+          search the complete collection below.
         </Text>
         <Pressable
           accessibilityRole="link"
@@ -343,7 +372,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
           accessibilityLabel={`Search ${book.title}`}
           autoCorrect={false}
           onChangeText={setQuery}
-          placeholder="Search words, narrator, book, or hadith #"
+          placeholder="Search Arabic, English, narrator, book, or hadith #"
           placeholderTextColor={palette.muted}
           style={[styles.searchInput, theme.text]}
           value={query}
@@ -459,12 +488,16 @@ function SampleHadithCard({
   isSaved,
   onSave,
   onShare,
+  translation,
+  translationLabel,
 }: {
   bookTitle: string;
   hadith: HadithSample;
   isSaved: boolean;
   onSave: () => void;
   onShare: () => void;
+  translation: string;
+  translationLabel: string;
 }) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
@@ -499,8 +532,16 @@ function SampleHadithCard({
           </Pressable>
         </View>
       </View>
+      <View style={[styles.languageHeader, theme.border]}>
+        <Text style={[styles.languageLabel, { color: palette.green }]}>
+          Arabic
+        </Text>
+        <Text style={[styles.languageLabel, theme.mutedText]}>
+          {translationLabel}
+        </Text>
+      </View>
       <Text style={[styles.arabic, theme.text]}>{hadith.arabic}</Text>
-      <Text style={[styles.translation, theme.text]}>{hadith.translation}</Text>
+      <Text style={[styles.translation, theme.text]}>{translation}</Text>
       <Text style={[styles.narrator, theme.mutedText]}>{hadith.narrator}</Text>
     </View>
   );
@@ -675,12 +716,30 @@ const styles = StyleSheet.create({
   numberText: { color: colors.green, fontSize: 10, fontWeight: '800' },
   chapterName: { color: colors.muted, flex: 1, fontSize: 9 },
   hadithActions: { flexDirection: 'row', gap: 17 },
+  languageHeader: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    paddingVertical: 9,
+  },
+  languageLabel: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
   arabic: {
     color: colors.ink,
-    fontSize: 22,
-    lineHeight: 40,
+    fontSize: 24,
+    lineHeight: 43,
     textAlign: 'right',
-    marginVertical: 17,
+    writingDirection: 'rtl',
+    marginTop: 17,
+    marginBottom: 15,
   },
   narratorLead: {
     color: colors.green,
@@ -689,7 +748,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 7,
   },
-  translation: { color: colors.ink, fontSize: 14, lineHeight: 22 },
+  translation: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 23,
+    writingDirection: 'ltr',
+  },
   narrator: { color: colors.muted, fontSize: 10, marginTop: 12 },
   chapterArabic: {
     color: colors.muted,

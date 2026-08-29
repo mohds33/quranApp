@@ -10,8 +10,7 @@ import NativeAppleMapsSearch from '../../specs/NativeAppleMapsSearch';
 import { distanceKm } from './mosques';
 import type { Coordinates, Mosque } from './mosques';
 
-
-// Maybe if I had like a radius of 30km, I could find the closest mosque and then use that to get the prayer times. 
+// Maybe if I had like a radius of 30km, I could find the closest mosque and then use that to get the prayer times.
 // and it'll be more or less generalized times for that rough area. That way if we get a specific mosque but no prayer times
 // we can stil get prayer times for that area.
 
@@ -34,6 +33,12 @@ export type DailyPrayerSchedule = {
   readableDate: string;
   hijriDate: string;
   methodName: string;
+};
+
+export type NextPrayerOccurrence = {
+  name: PrayerName;
+  date: Date;
+  timing: string;
 };
 
 export type AddressPrayerSchedule = {
@@ -96,6 +101,8 @@ export type PublishedMosquePrayerSchedule = {
 
 export const MASJID_AYESHA_PRAYER_TIMES_URL = 'https://masjidayesha.ca/';
 const AL_FARUQ_CENTRE_WEBSITE_URL = 'https://www.alfaruqcentre.com/';
+export const DARUL_ILMI_EDMONTON_WEBSITE_URL =
+  'https://www.darulilmimasjid.ca/';
 export const AL_FARUQ_CENTRE_PRAYER_TIMES_URL =
   'https://www.alfaruqcentre.com/prayertimes';
 const AL_FARUQ_CENTRE_PRAYER_TIMES_API =
@@ -187,6 +194,32 @@ export function calculatePrayerSchedule(
   };
 }
 
+export function getNextPrayerOccurrence(
+  schedule: DailyPrayerSchedule,
+  origin: Coordinates,
+  now = new Date(),
+  method: CalculationMethodKey = 'northAmerica',
+): NextPrayerOccurrence {
+  const upcoming = prayerNames
+    .map(name => ({
+      name,
+      date: schedule.dates[name],
+      timing: schedule.timings[name],
+    }))
+    .find(entry => entry.date > now);
+
+  if (upcoming) return upcoming;
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowSchedule = calculatePrayerSchedule(origin, tomorrow, method);
+  return {
+    name: 'Fajr',
+    date: tomorrowSchedule.dates.Fajr,
+    timing: tomorrowSchedule.timings.Fajr,
+  };
+}
+
 export function calculateQiblaDirection(origin: Coordinates) {
   return Qibla(new AdhanCoordinates(origin.latitude, origin.longitude));
 }
@@ -205,17 +238,53 @@ async function fetchWithTimeout(
   }
 }
 
+function settleWithin<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      value => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      failure => {
+        clearTimeout(timeout);
+        reject(failure);
+      },
+    );
+  });
+}
+
 function normalizeLocalizedWebsiteText(value: string) {
-  const digitSets = ['٠١٢٣٤٥٦٧٨٩', '۰۱۲۳۴۵۶۷۸۹', '০১২৩৪৫৬৭৮৯', '०१२३४५६७८९'];
+  const digitSets = [
+    '٠١٢٣٤٥٦٧٨٩',
+    '۰۱۲۳۴۵۶۷۸۹',
+    '০১২৩৪৫৬৭৮৯',
+    '०१२३४५६७८९',
+    '੦੧੨੩੪੫੬੭੮੯',
+    '૦૧૨૩૪૫૬૭૮૯',
+    '୦୧୨୩୪୫୬୭୮୯',
+    '௦௧௨௩௪௫௬௭௮௯',
+    '౦౧౨౩౪౫౬౭౮౯',
+    '೦೧೨೩೪೫೬೭೮೯',
+    '൦൧൨൩൪൫൬൭൮൯',
+    '๐๑๒๓๔๕๖๗๘๙',
+    '໐໑໒໓໔໕໖໗໘໙',
+    '၀၁၂၃၄၅၆၇၈၉',
+    '០១២៣៤៥៦៧៨៩',
+  ];
   return value
-    .replace(/[٠-٩۰-۹০-৯०-९]/g, digit => {
+    .normalize('NFKD')
+    .replace(/\p{Nd}/gu, digit => {
       for (const set of digitSets) {
         const index = set.indexOf(digit);
         if (index >= 0) return String(index);
       }
       return digit;
     })
-    .normalize('NFKD')
     .replace(
       /[\u0300-\u036f\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed]/g,
       '',
@@ -225,39 +294,132 @@ function normalizeLocalizedWebsiteText(value: string) {
 }
 
 function websiteHtmlToText(html: string) {
-  const namedEntities: Record<string, string> = {
-    eacute: 'é',
-    egrave: 'è',
-    ecirc: 'ê',
-    aacute: 'á',
-    oacute: 'ó',
-    uacute: 'ú',
-    ouml: 'ö',
-    uuml: 'ü',
-    ccedil: 'ç',
+  const chunks: string[] = [];
+  const ignoredTags = new Set(['script', 'style', 'template']);
+  const blockTags = new Set([
+    'address',
+    'article',
+    'br',
+    'div',
+    'dl',
+    'dt',
+    'dd',
+    'figcaption',
+    'footer',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'header',
+    'li',
+    'main',
+    'p',
+    'section',
+    'table',
+    'tr',
+    'ul',
+  ]);
+  const cellTags = new Set(['td', 'th']);
+  let ignoredDepth = 0;
+  const decodeEntities = (text: string) => {
+    const namedEntities: Record<string, string> = {
+      amp: '&',
+      apos: "'",
+      gt: '>',
+      hellip: '…',
+      laquo: '«',
+      ldquo: '“',
+      lsquo: '‘',
+      lt: '<',
+      mdash: '—',
+      nbsp: ' ',
+      ndash: '–',
+      quot: '"',
+      raquo: '»',
+      rdquo: '”',
+      rsquo: '’',
+    };
+    return text.replace(
+      /&(?:#(\d+)|#x([0-9a-f]+)|([a-z][a-z0-9]+));/gi,
+      (entity, decimal: string, hexadecimal: string, name: string) => {
+        const codePoint = decimal
+          ? Number(decimal)
+          : hexadecimal
+          ? Number.parseInt(hexadecimal, 16)
+          : NaN;
+        if (
+          Number.isFinite(codePoint) &&
+          codePoint > 0 &&
+          codePoint <= 0x10ffff
+        ) {
+          try {
+            return String.fromCodePoint(codePoint);
+          } catch {
+            return entity;
+          }
+        }
+        return namedEntities[name?.toLocaleLowerCase()] ?? entity;
+      },
+    );
   };
-  const text = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;|&#160;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&#0*39;|&apos;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#x([0-9a-f]+);/gi, (_, value: string) =>
-      String.fromCodePoint(Number.parseInt(value, 16)),
-    )
-    .replace(/&#(\d+);/g, (_, value: string) =>
-      String.fromCodePoint(Number(value)),
-    )
-    .replace(
-      /&([a-z]+);/gi,
-      (entity, name: string) => namedEntities[name.toLowerCase()] ?? entity,
-    )
-    .replace(/\s+/g, ' ')
+  const appendText = (text: string) => {
+    if (!ignoredDepth && text) chunks.push(decodeEntities(text));
+  };
+  const tagEnd = (start: number) => {
+    let quote = '';
+    for (let index = start; index < html.length; index += 1) {
+      const character = html[index];
+      if (quote) {
+        if (character === quote) quote = '';
+      } else if (character === '"' || character === "'") {
+        quote = character;
+      } else if (character === '>') {
+        return index;
+      }
+    }
+    return html.length - 1;
+  };
+
+  let cursor = 0;
+  while (cursor < html.length) {
+    const opening = html.indexOf('<', cursor);
+    if (opening < 0) {
+      appendText(html.slice(cursor));
+      break;
+    }
+    appendText(html.slice(cursor, opening));
+    if (html.startsWith('<!--', opening)) {
+      const commentEnd = html.indexOf('-->', opening + 4);
+      cursor = commentEnd < 0 ? html.length : commentEnd + 3;
+      continue;
+    }
+    const closing = tagEnd(opening + 1);
+    const rawTag = html.slice(opening + 1, closing).trim();
+    const isClosing = rawTag.startsWith('/');
+    const name = rawTag
+      .replace(/^\//, '')
+      .match(/^([a-z][a-z0-9:-]*)/i)?.[1]
+      ?.toLocaleLowerCase();
+    if (name) {
+      if (isClosing && ignoredTags.has(name)) {
+        ignoredDepth = Math.max(0, ignoredDepth - 1);
+      } else if (!isClosing && ignoredTags.has(name)) {
+        ignoredDepth += 1;
+      } else if (!ignoredDepth) {
+        if (isClosing && cellTags.has(name)) chunks.push(' | ');
+        else if (blockTags.has(name)) chunks.push('\n');
+      }
+    }
+    cursor = closing + 1;
+  }
+
+  return normalizeLocalizedWebsiteText(chunks.join(''))
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .replace(/\n{2,}/g, '\n')
     .trim();
-  return normalizeLocalizedWebsiteText(text);
 }
 
 function normalizePublishedTime(value: string) {
@@ -335,26 +497,234 @@ export async function fetchMasjidAyeshaPrayerSchedule() {
   return parseMasjidAyeshaPrayerScheduleHTML(await response.text());
 }
 
-const websitePrayerAliases: Record<MasjidAyeshaPrayerName, string> = {
-  Fajr: 'Fajr|Fajer|Fajir|Fedzr|Fedjr|Fecr|Subh|Sobh|Subuh|Subax|Sabah|Sabahu|الفجر|فجر|الصبح|صبح|ফজর',
-  Dhuhr:
-    'Dhuhr|Duhur|Duhr|Zuhr|Zuhur|Dzuhur|Zohar|Zohr|Dhohr|Dhor|Ogle|Podne|Dreke|Noon|Midi|الظهر|ظهر|ظہر|জোহর|যোহর',
-  Asr: 'Asr|Asar|Ashar|Casar|Ikindi|Ikindija|Ikindia|العصر|عصر|আসর',
-  Maghrib:
-    'Maghrib|Maghreb|Magrib|Maqrib|Aksam|Aksham|Akshami|المغرب|مغرب|মাগরিব',
-  Isha: 'Isha|Ishaa|Esha|Eshaa|Icha|Isya|Isyak|Cisho|Yatsi|Jacija|Jacia|العشاء|عشاء|ইশা|এশা',
+function escapeRegexLiteral(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const websitePrayerAliasValues: Record<
+  MasjidAyeshaPrayerName,
+  readonly string[]
+> = {
+  Fajr: [
+    'Fajr',
+    'Fajer',
+    'Fajir',
+    'Fedzr',
+    'Fedjr',
+    'Fecr',
+    'Subh',
+    'Sobh',
+    'Subuh',
+    'Subax',
+    'Sabah',
+    'Sabahu',
+    'Alfajiri',
+    'الفجر',
+    'فجر',
+    'الصبح',
+    'صبح',
+    'نماز صبح',
+    'ফজর',
+    'Фаджр',
+    '晨礼',
+    '晨禮',
+    'ファジュル',
+    'ファジル',
+    'फ़ज्र',
+    'फज्र',
+    'सुबह',
+    'ഫജർ',
+    'ஃபஜ்ர்',
+  ],
+  Dhuhr: [
+    'Dhuhr',
+    'Duhur',
+    'Duhr',
+    'Zuhr',
+    'Zuhur',
+    'Dzuhur',
+    'Zohar',
+    'Zohor',
+    'Zohr',
+    'Dhohr',
+    'Dhor',
+    'Ogle',
+    'Podne',
+    'Dreke',
+    'Noon',
+    'Midday',
+    'Midi',
+    'Adhuhuri',
+    'Mchana',
+    'الظهر',
+    'ظهر',
+    'ظہر',
+    'জোহর',
+    'যোহর',
+    'Зухр',
+    '晌礼',
+    '晌禮',
+    '午礼',
+    '午禮',
+    'ズフル',
+    'ज़ुहर',
+    'जुहर',
+    'दोपहर',
+    'ളുഹർ',
+    'லுஹர்',
+  ],
+  Asr: [
+    'Asr',
+    'Asar',
+    'Ashar',
+    'Casar',
+    'Ikindi',
+    'Ikindija',
+    'Ikindia',
+    'Alasiri',
+    'العصر',
+    'عصر',
+    'আসর',
+    'Аср',
+    '晡礼',
+    '晡禮',
+    'アスル',
+    'अस्र',
+    'അസർ',
+    'அஸர்',
+  ],
+  Maghrib: [
+    'Maghrib',
+    'Maghreb',
+    'Magrib',
+    'Maqrib',
+    'Aksam',
+    'Aksham',
+    'Akshami',
+    'Magharibi',
+    'المغرب',
+    'مغرب',
+    'মাগরিব',
+    'Магриб',
+    '昏礼',
+    '昏禮',
+    'マグリブ',
+    'मग़रिब',
+    'मगरिब',
+    'മഗ്‌രിബ്',
+    'மஃரிப்',
+  ],
+  Isha: [
+    'Isha',
+    'Ishaa',
+    'Esha',
+    'Eshaa',
+    'Icha',
+    'Ischa',
+    'Isya',
+    'Isyak',
+    'Cisho',
+    'Yatsi',
+    'Jacija',
+    'Jacia',
+    'العشاء',
+    'عشاء',
+    'ইশা',
+    'এশা',
+    'Иша',
+    '宵礼',
+    '宵禮',
+    'イシャー',
+    'イシャ',
+    'इशा',
+    'ഇശാ',
+    'இஷா',
+  ],
 };
-const websiteJummahAliases =
-  "Jum(?:u['’]?ah|ua|mah)|Joumou['’]?a|Yumuah|Friday\\s+(?:Prayer|Prayers|Salah|Salaah)|Freitagsgebet|Cuma|Vendredi(?:\\s+(?:Priere|Salat))?|Jumat|Jumaat|Dzuma|Xhuma|Jimco|الجمعة|جمعه|جمعہ|জুমা";
+
+const normalizedPrayerAliasValues = Object.fromEntries(
+  Object.entries(websitePrayerAliasValues).map(([name, aliases]) => [
+    name,
+    aliases.map(alias =>
+      normalizeLocalizedWebsiteText(alias).toLocaleLowerCase(),
+    ),
+  ]),
+) as Record<MasjidAyeshaPrayerName, string[]>;
+
+const websitePrayerAliases = Object.fromEntries(
+  Object.entries(normalizedPrayerAliasValues).map(([name, aliases]) => [
+    name,
+    aliases.map(escapeRegexLiteral).join('|'),
+  ]),
+) as Record<MasjidAyeshaPrayerName, string>;
+
+const websiteJummahAliasValues = [
+  'Jummah',
+  'Jumuah',
+  'Jumua',
+  'Jouma',
+  'Joumoua',
+  'Yumuah',
+  'Friday Prayer',
+  'Friday Prayers',
+  'Friday Salah',
+  'Freitagsgebet',
+  'Cuma',
+  'Vendredi',
+  'Priere du vendredi',
+  'Jumat',
+  'Jumaat',
+  'Dzuma',
+  'Xhuma',
+  'Jimco',
+  'Oracion del viernes',
+  'Oracao de sexta',
+  'Джума',
+  'Пятничная молитва',
+  'الجمعة',
+  'جمعه',
+  'جمعہ',
+  'জুমা',
+  '主麻',
+  '聚礼',
+  '聚禮',
+  'ジュムア',
+];
+const normalizedJummahAliasValues = websiteJummahAliasValues.map(alias =>
+  normalizeLocalizedWebsiteText(alias).toLocaleLowerCase(),
+);
+const normalizedJummahDataAliases = normalizedJummahAliasValues.map(
+  normalizedWebsiteDataKey,
+);
+const websiteJummahAliases = normalizedJummahAliasValues
+  .map(escapeRegexLiteral)
+  .join('|');
 
 const websiteTimePattern =
-  /(?:[01]?\d|2[0-3])[:.][0-5]\d\s*(?:a\.?\s*m\.?|p\.?\s*m\.?|[صم])?/gi;
+  /(?:(?:上午|下午|午前|午後)\s*)?(?:[01]?\d|2[0-3])[:.][0-5]\d\s*(?:a\.?\s*m\.?|p\.?\s*m\.?|[صم]|上午|下午|午前|午後)?/gi;
 const websiteScheduleWords =
-  /(?:(?:prayer|salah|salat)[\s_-]*(?:times?|timings?|timetable|schedule)|iqamah|jamaat|jamat|jummah|jumuah|timetable|namaz|vaktija|namaska\s+vremena|orari\s+i\s+namazit|(?:ramadan|monthly|yearly)\s+(?:prayer\s+)?schedule|horaires?\s+(?:de\s+)?priere|heures?\s+(?:de\s+)?priere|gebetszeiten|tiempos?\s+de\s+oracion|horarios?\s+de\s+oracion|orari[oa]\s+(?:di\s+)?preghier[ae]|gebedstijden|namaz\s+(?:vakitleri|saatleri|vremena)|waktu\s+(?:solat|salat|sholat)|waqtiyada\s+salaadda|مواقيت\s*(?:الصلاة|الصلاه)|اوقات\s*(?:الصلاة|الصلاه)|اوقات\s*نماز|نماز\s*کے\s*اوقات|নামাজের\s*সময়|awqat-salat|namaz-sutra|tiempos-de-oracion|horaires-de-priere|orario-di-preghiera|demen-nimeje|waktu-solat|namaz-vakitleri|waktu-sholat|waqtiyada-salaadda|namaaz-ke-auqat|casy-modlitieb|namajera-samaya|imaidoket|reihai-jikan|bon-?tider|bonnetider|vremya-molitv|neram-pattiyal)/i;
+  /(?:(?:prayer|salah|salat)[\s_-]*(?:times?|timings?|timetable|schedule)|iqamah|jamaat|jamat|jummah|jumuah|timetable|namaz|vaktija|namaska\s+vremena|orari\s+i\s+namazit|(?:ramadan|monthly|yearly)\s+(?:prayer\s+)?schedule|horaires?\s+(?:de\s+)?priere|heures?\s+(?:de\s+)?priere|gebetszeiten|gebetsplan|tiempos?\s+de\s+oracion|horarios?\s+de\s+oracion|horarios?\s+de\s+reza|orari[oa]\s+(?:di\s+)?preghier[ae]|gebedstijden|namaz\s+(?:vakitleri|saatleri|vremena)|waktu\s+(?:solat|salat|sholat|sembahyang)|waqtiyada\s+salaadda|nyakati\s+za\s+(?:swala|sala)|молитвенн?ое?\s+время|время\s+(?:намаза|молитв)|расписание\s+(?:намаза|молитв)|مواقيت\s*(?:الصلاة|الصلاه)|اوقات\s*(?:الصلاة|الصلاه)|اوقات\s*نماز|نماز\s*کے\s*اوقات|নামাজের\s*সময়|नमाज़?\s+का\s+समय|礼拜时间|禮拜時間|祈祷时间|祈禱時間|礼拝時刻|礼拝時間|awqat-salat|namaz-sutra|tiempos-de-oracion|horaires-de-priere|orario-di-preghiera|demen-nimeje|waktu-solat|namaz-vakitleri|waktu-sholat|waqtiyada-salaadda|namaaz-ke-auqat|casy-modlitieb|namajera-samaya|imaidoket|reihai-jikan|bon-?tider|bonnetider|vremya-molitv|neram-pattiyal)/i;
 
 function normalizeWebsiteTime(value: string, prayer?: MasjidAyeshaPrayerName) {
+  let localizedSuffix = '';
   const cleaned = normalizeLocalizedWebsiteText(value)
     .replace(/(\d)\.(?=\d)/g, '$1:')
+    .replace(/^(上午|午前)\s*/i, () => {
+      localizedSuffix = 'A';
+      return '';
+    })
+    .replace(/^(下午|午後)\s*/i, () => {
+      localizedSuffix = 'P';
+      return '';
+    })
+    .replace(/\s*(上午|午前)$/i, () => {
+      localizedSuffix = 'A';
+      return '';
+    })
+    .replace(/\s*(下午|午後)$/i, () => {
+      localizedSuffix = 'P';
+      return '';
+    })
     .replace(/\s+/g, ' ')
     .trim();
   const match = cleaned.match(
@@ -364,8 +734,9 @@ function normalizeWebsiteTime(value: string, prayer?: MasjidAyeshaPrayerName) {
   let hour = Number(match[1]);
   const minute = Number(match[2]);
   const explicitSuffix =
-    match[3]?.toUpperCase() ??
-    (match[4] === 'ص' ? 'A' : match[4] === 'م' ? 'P' : undefined);
+    localizedSuffix ||
+    (match[3]?.toUpperCase() ??
+      (match[4] === 'ص' ? 'A' : match[4] === 'م' ? 'P' : undefined));
   if (minute > 59 || hour > 23) return '';
   if (explicitSuffix) {
     if (hour < 1 || hour > 12) return '';
@@ -482,8 +853,8 @@ function semanticWebsiteTime(
   const prayerPattern = new RegExp(`(?:${websitePrayerAliases[name]})`, 'i');
   const rolePattern =
     kind === 'adhan'
-      ? /(?:adhaan|adhan|athaan|athan|azzan|azan|ezan|salah|start|begin|heure|horaire|zeit|vakit|waqt|waktu|tiempo|اذان|أذان|وقت)/i
-      : /(?:iqamah|iqama|iqaamah|jamaat|jamat|congregation|kamet|اقامة|إقامة|جماعة)/i;
+      ? /(?:adhaan|adhan|athaan|athan|azzan|azan|ezan|salah|start|begin|debut|inicio|beginn|heure|horaire|zeit|vakit|waqt|waktu|tiempo|mwanzo|начало|время|时间|時間|入时|入時|時刻|開始|समय|সময়|اذان|أذان|وقت)/i
+      : /(?:iqamah|iqama|iqaamah|jamaat|jamat|jamaah|congregation|kamet|ikamet|икамат|成班礼|成班禮|جماعت|জামাত|اقامة|إقامة|جماعة)/i;
 
   for (const match of html.matchAll(/<[^>]+>/g)) {
     const tag = normalizeLocalizedWebsiteText(match[0]);
@@ -503,8 +874,17 @@ function normalizedWebsiteDataKey(value: string) {
   return normalizeLocalizedWebsiteText(value)
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .toLowerCase()
-    .replace(/[^a-z0-9\u0600-\u06ff\u0980-\u09ff]+/g, '_')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
     .replace(/^_|_$/g, '');
+}
+
+function websiteDataKeyContainsPart(key: string, part: string) {
+  return (
+    key === part ||
+    key.startsWith(`${part}_`) ||
+    key.endsWith(`_${part}`) ||
+    key.includes(`_${part}_`)
+  );
 }
 
 function flattenWebsiteData(
@@ -608,10 +988,9 @@ function genericWebsiteDataTime(
   for (const [key, value] of data) {
     if (
       prayerAliases.some(prayerAlias =>
-        roleAliases.some(roleAlias =>
-          key.endsWith(`${prayerAlias}_${roleAlias}`),
-        ),
-      )
+        websiteDataKeyContainsPart(key, prayerAlias),
+      ) &&
+      roleAliases.some(roleAlias => websiteDataKeyContainsPart(key, roleAlias))
     ) {
       const time = normalizeWebsiteTime(String(value ?? ''), prayer);
       if (time) return time;
@@ -624,12 +1003,78 @@ function publishedPrayerName(value: unknown): MasjidAyeshaPrayerName | null {
   const label = normalizeLocalizedWebsiteText(String(value ?? ''))
     .toLocaleLowerCase()
     .trim();
-  if (/^(?:fajr|fajer|subh|الفجر|فجر)$/.test(label)) return 'Fajr';
-  if (/^(?:dhuhr|duhr|zuhr|zuhur|الظهر|ظهر)$/.test(label)) return 'Dhuhr';
-  if (/^(?:asr|asar|العصر|عصر)$/.test(label)) return 'Asr';
-  if (/^(?:maghrib|maghreb|magrib|المغرب|مغرب)$/.test(label)) return 'Maghrib';
-  if (/^(?:isha|ishaa|esha|العشاء|عشاء)$/.test(label)) return 'Isha';
+  for (const name of masjidAyeshaPrayerNames) {
+    if (normalizedPrayerAliasValues[name].includes(label)) return name;
+  }
   return null;
+}
+
+const websitePrayerNameFields = [
+  'name',
+  'prayer',
+  'salah',
+  'salat',
+  'namaz',
+  'label',
+  'молитва',
+  'намаз',
+  '礼拜',
+  '禮拜',
+  '礼拝',
+  'نماز',
+  'الصلاة',
+];
+const websiteAdhanFields = [
+  'adhan',
+  'athan',
+  'athaan',
+  'azan',
+  'azzan',
+  'start',
+  'starts',
+  'time',
+  'timing',
+  'inicio',
+  'debut',
+  'beginn',
+  'начало',
+  'время',
+  '时间',
+  '時間',
+  '入时',
+  '入時',
+  '時刻',
+  'समय',
+  'সময়',
+  'وقت',
+];
+const websiteIqamahFields = [
+  'iqamah',
+  'iqama',
+  'iqaamah',
+  'ikamet',
+  'jamaat',
+  'jamat',
+  'jamaah',
+  'congregation',
+  'икамат',
+  '成班礼',
+  '成班禮',
+  'جماعت',
+  'জামাত',
+  'اقامة',
+  'إقامة',
+];
+
+function localizedWebsiteObjectValue(
+  value: Record<string, unknown>,
+  fields: string[],
+) {
+  const normalizedFields = fields.map(normalizedWebsiteDataKey);
+  for (const [key, item] of Object.entries(value)) {
+    if (normalizedFields.includes(normalizedWebsiteDataKey(key))) return item;
+  }
+  return undefined;
 }
 
 function findPublishedPrayerRows(value: unknown, depth = 0): any[] {
@@ -640,7 +1085,7 @@ function findPublishedPrayerRows(value: unknown, depth = 0): any[] {
         item &&
         typeof item === 'object' &&
         publishedPrayerName(
-          item.name ?? item.prayer ?? item.salah ?? item.label,
+          localizedWebsiteObjectValue(item, websitePrayerNameFields),
         ),
     );
     if (labelled.length >= 3) return labelled;
@@ -671,29 +1116,15 @@ export function parsePublishedMosqueWebsiteData(
     const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
     for (const row of prayerRows) {
       const name = publishedPrayerName(
-        row.name ?? row.prayer ?? row.salah ?? row.label,
+        localizedWebsiteObjectValue(row, websitePrayerNameFields),
       );
       if (!name) continue;
       const adhanTime = normalizeWebsiteTime(
-        String(
-          row.adhan ??
-            row.athan ??
-            row.athaan ??
-            row.azan ??
-            row.start ??
-            '',
-        ),
+        String(localizedWebsiteObjectValue(row, websiteAdhanFields) ?? ''),
         name,
       );
       const iqamahTime = normalizeWebsiteTime(
-        String(
-          row.iqamah ??
-            row.iqama ??
-            row.iqaamah ??
-            row.jamaat ??
-            row.congregation ??
-            '',
-        ),
+        String(localizedWebsiteObjectValue(row, websiteIqamahFields) ?? ''),
         name,
       );
       if (adhanTime) adhan[name] = adhanTime;
@@ -702,10 +1133,12 @@ export function parsePublishedMosqueWebsiteData(
     if (Object.keys(adhan).length >= 3 || Object.keys(iqamah).length >= 3) {
       const flattenedRows = flattenWebsiteData(payload);
       const jummah = [...flattenedRows]
-        .filter(([key]) => /(?:jummah|jumuah|jumua)/.test(key))
-        .map(([, value]) =>
-          normalizeWebsiteTime(String(value ?? ''), 'Dhuhr'),
+        .filter(([key]) =>
+          normalizedJummahDataAliases.some(alias =>
+            websiteDataKeyContainsPart(key, alias),
+          ),
         )
+        .map(([, value]) => normalizeWebsiteTime(String(value ?? ''), 'Dhuhr'))
         .filter(Boolean)
         .filter(time => {
           const minutes = displayTimeMinutes(time);
@@ -728,88 +1161,12 @@ export function parsePublishedMosqueWebsiteData(
   const flattened = flattenWebsiteData(payload);
   const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
   const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
-  const aliases: Record<MasjidAyeshaPrayerName, string[]> = {
-    Fajr: [
-      'fajr',
-      'fajer',
-      'fajir',
-      'fedzr',
-      'fedjr',
-      'fecr',
-      'subh',
-      'sobh',
-      'subuh',
-      'subax',
-      'sabah',
-      'sabahu',
-      'الفجر',
-      'فجر',
-      'الصبح',
-      'صبح',
-      'ফজর',
-    ],
-    Dhuhr: [
-      'dhuhr',
-      'duhur',
-      'duhr',
-      'zuhr',
-      'zuhur',
-      'dzuhur',
-      'zohr',
-      'dhohr',
-      'dhor',
-      'ogle',
-      'podne',
-      'dreke',
-      'midi',
-      'الظهر',
-      'ظهر',
-      'ظہر',
-      'জোহর',
-      'যোহর',
-    ],
-    Asr: [
-      'asr',
-      'asar',
-      'ashar',
-      'casar',
-      'ikindi',
-      'ikindija',
-      'ikindia',
-      'العصر',
-      'عصر',
-      'আসর',
-    ],
-    Maghrib: [
-      'maghrib',
-      'maghreb',
-      'magrib',
-      'maqrib',
-      'aksam',
-      'aksham',
-      'akshami',
-      'المغرب',
-      'مغرب',
-      'মাগরিব',
-    ],
-    Isha: [
-      'isha',
-      'ishaa',
-      'esha',
-      'eshaa',
-      'icha',
-      'isya',
-      'isyak',
-      'cisho',
-      'yatsi',
-      'jacija',
-      'jacia',
-      'العشاء',
-      'عشاء',
-      'ইশা',
-      'এশা',
-    ],
-  };
+  const aliases = Object.fromEntries(
+    masjidAyeshaPrayerNames.map(name => [
+      name,
+      normalizedPrayerAliasValues[name].map(normalizedWebsiteDataKey),
+    ]),
+  ) as Record<MasjidAyeshaPrayerName, string[]>;
   const adhanRoles = [
     'adhan',
     'adhaan',
@@ -824,13 +1181,30 @@ export function parsePublishedMosqueWebsiteData(
     'begins',
     'time',
     'timing',
+    'start time',
+    'beginning',
+    'debut',
+    'inicio',
+    'hora',
     'heure',
     'horaire',
+    'beginn',
     'zeit',
     'vakit',
     'waqt',
     'waktu',
     'tiempo',
+    'mwanzo',
+    'начало',
+    'время',
+    '时间',
+    '時間',
+    '入时',
+    '入時',
+    '時刻',
+    '開始',
+    'समय',
+    'সময়',
     'اذان',
     'أذان',
     'وقت',
@@ -841,25 +1215,37 @@ export function parsePublishedMosqueWebsiteData(
     'iqaamah',
     'jamaat',
     'jamat',
+    'jamaah',
+    'berjamaah',
     'congregation',
+    'congregational',
     'kamet',
+    'ikamet',
+    'икамат',
+    '成班礼',
+    '成班禮',
+    ' الجماعة',
+    'جماعت',
+    'জামাত',
     'اقامة',
     'إقامة',
     'جماعة',
   ];
+  const normalizedAdhanRoles = adhanRoles.map(normalizedWebsiteDataKey);
+  const normalizedIqamahRoles = iqamahRoles.map(normalizedWebsiteDataKey);
   let prayerCount = 0;
 
   for (const name of masjidAyeshaPrayerNames) {
     const adhanTime = genericWebsiteDataTime(
       flattened,
       aliases[name],
-      adhanRoles,
+      normalizedAdhanRoles,
       name,
     );
     const iqamahTime = genericWebsiteDataTime(
       flattened,
       aliases[name],
-      iqamahRoles,
+      normalizedIqamahRoles,
       name,
     );
     if (adhanTime) adhan[name] = adhanTime;
@@ -869,8 +1255,8 @@ export function parsePublishedMosqueWebsiteData(
 
   const jummah = [...flattened]
     .filter(([key]) =>
-      /(?:^|_)(?:jummah|jumuah|joumoua|yumuah|cuma|jumat|jumaat|dzuma|xhuma|jimco|الجمعة|جمعه|جمعہ|জুমা)(?:_|$)/.test(
-        key,
+      normalizedJummahDataAliases.some(alias =>
+        websiteDataKeyContainsPart(key, alias),
       ),
     )
     .map(([, value]) => normalizeWebsiteTime(String(value ?? ''), 'Dhuhr'))
@@ -1071,7 +1457,9 @@ export function extractWebsiteScriptLinks(html: string, sourceUrl: string) {
   }
   const host = base.hostname.toLocaleLowerCase().replace(/^www\./, '');
   const scripts: string[] = [];
-  for (const tag of html.matchAll(/<script\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))[^>]*>/gi)) {
+  for (const tag of html.matchAll(
+    /<script\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))[^>]*>/gi,
+  )) {
     const raw = (tag[1] ?? tag[2] ?? tag[3] ?? '').replace(/&amp;/gi, '&');
     try {
       const resolved = new URL(raw, base);
@@ -1699,6 +2087,16 @@ function isAlFaruqCentre(mosque: Mosque) {
   );
 }
 
+function isDarulIlmiEdmonton(mosque: Mosque) {
+  const identity = normalizeLocalizedWebsiteText(
+    `${mosque.name} ${mosque.address}`,
+  ).toLocaleLowerCase();
+  return (
+    /dar(?:ul| al)?[\s-]*ilm(?:i)?|دار\s*العلم/i.test(identity) &&
+    /edmonton|t5w\s*1a5|4225\s+118/i.test(identity)
+  );
+}
+
 function isAthanPlusScheduleUrl(url: string) {
   try {
     return /^(?:timing\.)?athanplus\.com$/i.test(new URL(url).hostname);
@@ -1744,18 +2142,85 @@ function decodeWebsiteSearchValue(value: string) {
     );
 }
 
+function isSocialWebsiteHost(hostname: string) {
+  const host = hostname.toLocaleLowerCase().replace(/^www\./, '');
+  return /^(?:[^.]+\.)?(?:facebook|instagram|youtube|twitter|x|tiktok|linkedin)\.com$/.test(
+    host,
+  );
+}
+
 function isRejectedWebsiteSearchHost(hostname: string) {
   const host = hostname.toLocaleLowerCase().replace(/^www\./, '');
   return (
     /^(?:duckduckgo|google|bing|yahoo)\./.test(host) ||
-    /^(?:m\.)?(?:facebook|instagram|youtube|twitter|x|tiktok|linkedin)\.com$/.test(
-      host,
-    ) ||
+    isSocialWebsiteHost(host) ||
     /(?:^|\.)(?:yelp|mapquest|yellowpages|findglocal|canada-listing|informalberta|timesofsalah|globalprayertimes|prayersconnect|prayercalctime|islamicfinder|muslimandquran|salatomatic|esalah|jammat|masjidway|mapcarta|tripadvisor|waze|wikipedia|praysalat|cybo|travelsetu|adequatetravel|ancient-history-sites|islamicdates|muslimapp|alummahai|prayer-times)\./.test(
       host,
     ) ||
     /(?:^|\.)(?:211\.ca|maps\.apple\.com)$/.test(host)
   );
+}
+
+function decodedOfficialWebsiteValue(value: string, sourceUrl: string) {
+  let decoded = decodeWebsiteSearchValue(value.trim()).replace(/\\\//g, '/');
+  if (!decoded) return '';
+  if (decoded.startsWith('//')) decoded = `https:${decoded}`;
+  try {
+    let parsed = new URL(decoded, sourceUrl);
+    if (isSocialWebsiteHost(parsed.hostname)) {
+      const redirected =
+        parsed.searchParams.get('u') ??
+        parsed.searchParams.get('url') ??
+        parsed.searchParams.get('q') ??
+        parsed.searchParams.get('target');
+      if (!redirected) return '';
+      parsed = new URL(decodeURIComponent(redirected));
+    }
+    if (
+      !/^https?:$/.test(parsed.protocol) ||
+      isRejectedWebsiteSearchHost(parsed.hostname)
+    ) {
+      return '';
+    }
+    return parsed.href.replace(/#.*$/, '');
+  } catch {
+    return '';
+  }
+}
+
+export function extractOfficialWebsiteLinks(html: string, sourceUrl: string) {
+  const prioritized: string[] = [];
+  const candidates: string[] = [];
+  const officialLinkWords =
+    /(?:official\s+(?:website|site)|website|homepage|site\s+officiel|sitio\s+oficial|site\s+oficial|offizielle\s+webseite|sito\s+ufficiale|resmi\s+(?:web\s+)?sitesi|situs\s+resmi|الموقع\s+الرسمي|وب\s*سائٹ|ওয়েবসাইট|वेबसाइट|官方网站|官方網站|公式サイト|официальный\s+сайт)/i;
+  const addCandidate = (rawValue: string, label = '') => {
+    const website = decodedOfficialWebsiteValue(rawValue, sourceUrl);
+    if (
+      !website ||
+      prioritized.includes(website) ||
+      candidates.includes(website)
+    ) {
+      return;
+    }
+    if (officialLinkWords.test(label)) prioritized.push(website);
+    else candidates.push(website);
+  };
+
+  for (const anchor of html.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)) {
+    const href = anchor[0].match(
+      /\b(?:href|data-lynx-uri)\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i,
+    );
+    addCandidate(
+      href?.[1] ?? href?.[2] ?? href?.[3] ?? '',
+      websiteHtmlToText(anchor[0]),
+    );
+  }
+
+  const decodedHTML = decodeWebsiteSearchValue(html).replace(/\\\//g, '/');
+  for (const match of decodedHTML.matchAll(/https?:\/\/[^\s"'<>]+/gi)) {
+    addCandidate(match[0]);
+  }
+  return [...prioritized, ...candidates].slice(0, 8);
 }
 
 export function extractMosqueWebsiteSearchCandidates(html: string) {
@@ -1856,11 +2321,9 @@ function isKarbalaMosque(mosque: Mosque) {
 }
 
 function normalizedIdentityText(value: string) {
-  return value
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+  return normalizeLocalizedWebsiteText(value)
     .toLocaleLowerCase()
-    .replace(/[^a-z0-9\u0600-\u06ff]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
 }
 
@@ -1926,6 +2389,76 @@ export function websiteLocationMatchesSelectedMosque(
   );
 }
 
+function websiteStrongLocationMatchesSelectedMosque(
+  html: string,
+  mosque: Mosque,
+) {
+  const pageText = websiteHtmlToText(html);
+  const normalizedPageText = normalizedIdentityText(pageText);
+  const city = normalizedIdentityText(mosqueCity(mosque));
+  const cityMatches = containsNormalizedPhrase(normalizedPageText, city);
+  const postalCode = mosque.address.match(/\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b/i);
+  const normalizedPostalCode = postalCode
+    ? `${postalCode[1]}${postalCode[2]}`.toLocaleLowerCase()
+    : '';
+  const compactPageText = pageText
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
+  const streetNumber = mosque.address.match(/\b(\d{3,6})\b/)?.[1] ?? '';
+  return (
+    Boolean(
+      normalizedPostalCode && compactPageText.includes(normalizedPostalCode),
+    ) || Boolean(streetNumber && cityMatches && pageText.includes(streetNumber))
+  );
+}
+
+function publishedScheduleScore(schedule: PublishedMosquePrayerSchedule) {
+  return masjidAyeshaPrayerNames.reduce(
+    (total, name) =>
+      total + (schedule.adhan[name] ? 1 : 0) + (schedule.iqamah[name] ? 2 : 0),
+    Math.min(schedule.jummah.length, 3) * 2,
+  );
+}
+
+function mergePublishedSchedules(
+  schedules: PublishedMosquePrayerSchedule[],
+): PublishedMosquePrayerSchedule {
+  const ranked = [...schedules].sort(
+    (left, right) =>
+      publishedScheduleScore(right) - publishedScheduleScore(left),
+  );
+  const best = ranked[0];
+  const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
+  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
+  for (const schedule of ranked) {
+    for (const name of masjidAyeshaPrayerNames) {
+      if (!adhan[name] && schedule.adhan[name]) {
+        adhan[name] = schedule.adhan[name];
+      }
+      if (!iqamah[name] && schedule.iqamah[name]) {
+        iqamah[name] = schedule.iqamah[name];
+      }
+    }
+  }
+  const fridaySchedule = ranked.find(schedule => schedule.jummah.length);
+  return {
+    ...best,
+    adhan,
+    iqamah,
+    jummah: fridaySchedule?.jummah.slice(0, 3) ?? [],
+  };
+}
+
+function hasCompletePublishedSchedule(schedule: PublishedMosquePrayerSchedule) {
+  const adhanCount = masjidAyeshaPrayerNames.filter(
+    name => schedule.adhan[name],
+  ).length;
+  const iqamahCount = masjidAyeshaPrayerNames.filter(
+    name => schedule.iqamah[name],
+  ).length;
+  return adhanCount >= 4 && iqamahCount >= 4;
+}
+
 async function fetchOfficialMosqueWebsiteSchedule(
   mosque: Mosque,
   websiteOverride?: string,
@@ -1940,7 +2473,7 @@ async function fetchOfficialMosqueWebsiteSchedule(
       : mosque.website);
   if (!sourceUrl)
     throw new Error('This masjid has no official website listed.');
-  const response = await fetchWithTimeout(sourceUrl, 10000);
+  const response = await fetchWithTimeout(sourceUrl, 6500);
   if (!response.ok)
     throw new Error('The official website could not be reached.');
   const html = await response.text();
@@ -1963,7 +2496,7 @@ async function fetchOfficialMosqueWebsiteSchedule(
     !websiteMatchesSelectedMosque(html, mosque) &&
     !(
       allowLocationIdentity &&
-      websiteLocationMatchesSelectedMosque(html, mosque)
+      websiteStrongLocationMatchesSelectedMosque(html, mosque)
     )
   ) {
     throw new Error('The listed website belongs to a different organization.');
@@ -2004,6 +2537,9 @@ async function fetchOfficialMosqueWebsiteSchedule(
       // Most embedded JSON is unrelated page data.
     }
   }
+  if (schedules.some(hasCompletePublishedSchedule)) {
+    return mergePublishedSchedules(schedules);
+  }
 
   const discoveredScheduleLinks = extractPrayerScheduleLinks(
     html,
@@ -2014,7 +2550,7 @@ async function fetchOfficialMosqueWebsiteSchedule(
     ? [athanPlusLink]
     : discoveredScheduleLinks.slice(0, 4);
   const linkedScheduleRequests = linkedScheduleLinks.map(async link => {
-    const linkedResponse = await fetchWithTimeout(link, 8000);
+    const linkedResponse = await fetchWithTimeout(link, 5500);
     if (!linkedResponse.ok) throw new Error('Prayer schedule page failed.');
     const linkedSourceUrl = linkedResponse.url || link;
     const contentType = linkedResponse.headers.get('content-type') ?? '';
@@ -2064,7 +2600,7 @@ async function fetchOfficialMosqueWebsiteSchedule(
   for (const endpoint of extractPrayerDataEndpoints(html, resolvedSourceUrl)) {
     linkedScheduleRequests.push(
       (async () => {
-        const dataResponse = await fetchWithTimeout(endpoint, 8000);
+        const dataResponse = await fetchWithTimeout(endpoint, 5000);
         if (!dataResponse.ok) {
           throw new Error('The website prayer data request failed.');
         }
@@ -2079,18 +2615,20 @@ async function fetchOfficialMosqueWebsiteSchedule(
   for (const scriptUrl of extractWebsiteScriptLinks(html, resolvedSourceUrl)) {
     linkedScheduleRequests.push(
       (async () => {
-        const scriptResponse = await fetchWithTimeout(scriptUrl, 10000);
+        const scriptResponse = await fetchWithTimeout(scriptUrl, 5500);
         if (!scriptResponse.ok) {
           throw new Error('The mosque website application could not be read.');
         }
         const script = await scriptResponse.text();
         const endpoints = extractPrayerDataEndpoints(script, resolvedSourceUrl);
         if (!endpoints.length) {
-          throw new Error('No prayer data endpoint was found in the website app.');
+          throw new Error(
+            'No prayer data endpoint was found in the website app.',
+          );
         }
         const endpointResults = await Promise.allSettled(
           endpoints.map(async endpoint => {
-            const dataResponse = await fetchWithTimeout(endpoint, 8000);
+            const dataResponse = await fetchWithTimeout(endpoint, 5000);
             if (!dataResponse.ok) {
               throw new Error('The website prayer data request failed.');
             }
@@ -2130,7 +2668,7 @@ async function fetchOfficialMosqueWebsiteSchedule(
         !websiteMatchesSelectedMosque(renderedHTML, mosque) &&
         !(
           allowLocationIdentity &&
-          websiteLocationMatchesSelectedMosque(renderedHTML, mosque)
+          websiteStrongLocationMatchesSelectedMosque(renderedHTML, mosque)
         )
       ) {
         throw new Error(
@@ -2165,36 +2703,7 @@ async function fetchOfficialMosqueWebsiteSchedule(
     throw new Error('No published schedule was found on the official website.');
   }
 
-  const score = (schedule: PublishedMosquePrayerSchedule) =>
-    masjidAyeshaPrayerNames.reduce(
-      (total, name) =>
-        total +
-        (schedule.adhan[name] ? 1 : 0) +
-        (schedule.iqamah[name] ? 2 : 0),
-      Math.min(schedule.jummah.length, 3) * 2,
-    );
-  const ranked = [...schedules].sort(
-    (left, right) => score(right) - score(left),
-  );
-  const best = ranked[0];
-  const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
-  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
-  for (const schedule of ranked) {
-    for (const name of masjidAyeshaPrayerNames) {
-      if (!adhan[name] && schedule.adhan[name])
-        adhan[name] = schedule.adhan[name];
-      if (!iqamah[name] && schedule.iqamah[name])
-        iqamah[name] = schedule.iqamah[name];
-    }
-  }
-  const fridaySchedule = ranked.find(schedule => schedule.jummah.length);
-
-  return {
-    ...best,
-    adhan,
-    iqamah,
-    jummah: fridaySchedule?.jummah.slice(0, 3) ?? [],
-  };
+  return mergePublishedSchedules(schedules);
 }
 
 type WebsiteScheduleResult = {
@@ -2202,7 +2711,12 @@ type WebsiteScheduleResult = {
   website: string;
 };
 
+type DiscoveredWebsiteScheduleResult = WebsiteScheduleResult & {
+  foundBySearch: boolean;
+};
+
 const discoveredMosqueWebsiteCache = new Map<string, string>();
+const discoveredMosqueWebsiteRequests = new Map<string, Promise<string>>();
 
 function mosqueWebsiteCacheKey(mosque: Mosque) {
   return `${normalizedMosqueName(mosque.name)}:${mosque.latitude.toFixed(
@@ -2210,9 +2724,10 @@ function mosqueWebsiteCacheKey(mosque: Mosque) {
   )}:${mosque.longitude.toFixed(4)}`;
 }
 
-function knownOfficialMosqueWebsite(mosque: Mosque) {
+export function knownOfficialMosqueWebsite(mosque: Mosque) {
   if (isMasjidAyesha(mosque)) return MASJID_AYESHA_PRAYER_TIMES_URL;
   if (isAlFaruqCentre(mosque)) return AL_FARUQ_CENTRE_WEBSITE_URL;
+  if (isDarulIlmiEdmonton(mosque)) return DARUL_ILMI_EDMONTON_WEBSITE_URL;
   return undefined;
 }
 
@@ -2262,12 +2777,169 @@ function firstSuccessfulWebsiteSchedule(
   });
 }
 
+function firstSuccessfulRequest<T>(requests: Promise<T>[]) {
+  return new Promise<T>((resolve, reject) => {
+    if (!requests.length) {
+      reject(new Error('No requests were available.'));
+      return;
+    }
+    let failures = 0;
+    let lastFailure: unknown;
+    for (const request of requests) {
+      request.then(resolve, failure => {
+        failures += 1;
+        lastFailure = failure;
+        if (failures === requests.length) reject(lastFailure);
+      });
+    }
+  });
+}
+
+async function verifyOfficialMosqueWebsite(mosque: Mosque, website: string) {
+  const response = await fetchWithTimeout(website, 5500, {
+    headers: {
+      Accept: 'text/html,application/xhtml+xml',
+      'Accept-Language':
+        'en,ar;q=0.9,fr;q=0.8,es;q=0.8,ur;q=0.8,ru;q=0.8,zh;q=0.7',
+      'User-Agent':
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+    },
+  });
+  if (!response.ok) throw new Error('The mosque website could not be reached.');
+  const html = await response.text();
+  if (
+    !websiteMatchesSelectedMosque(html, mosque) &&
+    !websiteStrongLocationMatchesSelectedMosque(html, mosque)
+  ) {
+    throw new Error('The website identity did not match the selected mosque.');
+  }
+  return response.url || website;
+}
+
+function socialWebsiteValues(mosque: Mosque) {
+  return [mosque.website, ...(mosque.websiteCandidates ?? [])].filter(
+    (value, index, values): value is string => {
+      if (!value || values.indexOf(value) !== index) return false;
+      try {
+        return isSocialWebsiteHost(new URL(value).hostname);
+      } catch {
+        return false;
+      }
+    },
+  );
+}
+
+async function websitesLinkedFromSocialPages(mosque: Mosque) {
+  const results = await Promise.allSettled(
+    socialWebsiteValues(mosque)
+      .slice(0, 3)
+      .map(async socialWebsite => {
+        const response = await fetchWithTimeout(socialWebsite, 5000, {
+          headers: {
+            Accept: 'text/html,application/xhtml+xml',
+            'Accept-Language': '*',
+            'User-Agent':
+              'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+          },
+        });
+        if (!response.ok) return [];
+        return extractOfficialWebsiteLinks(
+          await response.text(),
+          response.url || socialWebsite,
+        );
+      }),
+  );
+  return results.flatMap(result =>
+    result.status === 'fulfilled' ? result.value : [],
+  );
+}
+
+export async function findOfficialMosqueWebsite(mosque: Mosque) {
+  const cacheKey = mosqueWebsiteCacheKey(mosque);
+  const cached = discoveredMosqueWebsiteCache.get(cacheKey);
+  if (cached) return cached;
+  const activeRequest = discoveredMosqueWebsiteRequests.get(cacheKey);
+  if (activeRequest) return activeRequest;
+
+  const request = (async () => {
+    const listedWebsites = uniqueWebsiteCandidates([
+      knownOfficialMosqueWebsite(mosque),
+      mosque.website,
+      ...(mosque.websiteCandidates ?? []),
+    ]);
+    const listedRequest = firstSuccessfulRequest(
+      listedWebsites.map(website =>
+        verifyOfficialMosqueWebsite(mosque, website),
+      ),
+    );
+    const discoveryRequest = (async () => {
+      const discoveries = await Promise.allSettled([
+        websitesLinkedFromSocialPages(mosque),
+        searchForOfficialMosqueWebsites(mosque),
+      ]);
+      const websites = uniqueWebsiteCandidates(
+        discoveries.flatMap(result =>
+          result.status === 'fulfilled' ? result.value : [],
+        ),
+      ).filter(website => !listedWebsites.includes(website));
+      return firstSuccessfulRequest(
+        websites
+          .slice(0, 8)
+          .map(website => verifyOfficialMosqueWebsite(mosque, website)),
+      );
+    })();
+    const website = await firstSuccessfulRequest([
+      listedRequest,
+      discoveryRequest,
+    ]);
+    discoveredMosqueWebsiteCache.set(cacheKey, website);
+    return website;
+  })().finally(() => {
+    if (discoveredMosqueWebsiteRequests.get(cacheKey) === request) {
+      discoveredMosqueWebsiteRequests.delete(cacheKey);
+    }
+  });
+  discoveredMosqueWebsiteRequests.set(cacheKey, request);
+  return request;
+}
+
 async function searchForOfficialMosqueWebsites(mosque: Mosque) {
   const city = mosqueCity(mosque);
   const identity = [mosque.name, city].filter(Boolean).join(' ');
-  const qualifiers = ['official website'];
+  const qualifiers = ['official website prayer times'];
+  if (/\p{Script=Latin}/u.test(identity)) {
+    qualifiers.push(
+      '"site officiel" OR "sitio oficial" OR "site oficial" OR "offizielle Webseite" OR "sito ufficiale" OR "resmi web sitesi" OR "situs resmi"',
+    );
+  }
   if (/[\u0600-\u06ff]/.test(identity) || isKarbalaMosque(mosque)) {
-    qualifiers.push('الموقع الرسمي مواقيت الصلاة');
+    qualifiers.push(
+      'الموقع الرسمي مواقيت الصلاة OR ویب سائٹ نماز کے اوقات OR وب‌سایت رسمی اوقات نماز',
+    );
+  }
+  if (/[\u0400-\u04ff]/.test(identity)) {
+    qualifiers.push('официальный сайт время намаза');
+  }
+  if (/[\u3400-\u9fff]/.test(identity)) {
+    qualifiers.push('官方网站 礼拜时间 OR 官方網站 禮拜時間');
+  }
+  if (/[\u3040-\u30ff]/.test(identity)) {
+    qualifiers.push('公式サイト 礼拝時間');
+  }
+  if (/[\u0900-\u097f]/.test(identity)) {
+    qualifiers.push('आधिकारिक वेबसाइट नमाज़ का समय');
+  }
+  if (/[\u0980-\u09ff]/.test(identity)) {
+    qualifiers.push('অফিসিয়াল ওয়েবসাইট নামাজের সময়');
+  }
+  if (/[\u0b80-\u0bff]/.test(identity)) {
+    qualifiers.push('அதிகாரப்பூர்வ இணையதளம் தொழுகை நேரம்');
+  }
+  if (/[\u0e00-\u0e7f]/.test(identity)) {
+    qualifiers.push('เว็บไซต์อย่างเป็นทางการ เวลาละหมาด');
+  }
+  if (/[\uac00-\ud7af]/.test(identity)) {
+    qualifiers.push('공식 웹사이트 기도 시간');
   }
   const results = await Promise.allSettled(
     qualifiers.flatMap(qualifier => {
@@ -2276,11 +2948,12 @@ async function searchForOfficialMosqueWebsites(mosque: Mosque) {
         (async () => {
           const response = await fetchWithTimeout(
             `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-            10000,
+            6500,
             {
               headers: {
                 Accept: 'text/html,application/xhtml+xml',
-                'Accept-Language': 'ar,en-CA;q=0.9,en;q=0.8',
+                'Accept-Language':
+                  'en,ar;q=0.9,fr;q=0.8,es;q=0.8,ur;q=0.8,fa;q=0.8,ru;q=0.8,zh;q=0.7,hi;q=0.7,bn;q=0.7,tr;q=0.7,id;q=0.7',
                 'User-Agent':
                   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
               },
@@ -2295,11 +2968,12 @@ async function searchForOfficialMosqueWebsites(mosque: Mosque) {
             `https://www.bing.com/search?format=rss&q=${encodeURIComponent(
               query,
             )}`,
-            10000,
+            6500,
             {
               headers: {
                 Accept: 'application/rss+xml,application/xml,text/xml',
-                'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+                'Accept-Language':
+                  'en,ar;q=0.9,fr;q=0.8,es;q=0.8,ur;q=0.8,fa;q=0.8,ru;q=0.8,zh;q=0.7,hi;q=0.7,bn;q=0.7,tr;q=0.7,id;q=0.7',
                 'User-Agent':
                   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
               },
@@ -2334,32 +3008,49 @@ async function fetchVerifiedMosqueWebsiteSchedule(mosque: Mosque) {
     ...(mosque.websiteCandidates ?? []),
   ]);
 
-  try {
-    const result = await firstSuccessfulWebsiteSchedule(listedWebsites, mosque);
-    return {
-      ...result.schedule,
-      officialWebsiteUrl: result.website,
-    };
-  } catch {
-    // The map listing may be wrong or may not contain a published schedule.
-  }
-
-  const searchedWebsites = (await searchForOfficialMosqueWebsites(mosque))
-    .filter(website => !listedWebsites.includes(website))
-    .slice(0, 3);
-  if (!searchedWebsites.length) {
-    throw new Error('No verified official mosque website was found.');
-  }
-  const result = await firstSuccessfulWebsiteSchedule(
-    searchedWebsites,
-    mosque,
-    true,
+  let cancelDelayedSearch: (() => void) | undefined;
+  const searchRequest = new Promise<DiscoveredWebsiteScheduleResult>(
+    (resolve, reject) => {
+      const timeout = setTimeout(async () => {
+        cancelDelayedSearch = undefined;
+        try {
+          const discoveredWebsite = await findOfficialMosqueWebsite(mosque);
+          if (listedWebsites.includes(discoveredWebsite)) {
+            throw new Error('No verified official mosque website was found.');
+          }
+          const result = await firstSuccessfulWebsiteSchedule(
+            [discoveredWebsite],
+            mosque,
+            true,
+          );
+          resolve({ ...result, foundBySearch: true });
+        } catch (failure) {
+          reject(failure);
+        }
+      }, 1200);
+      cancelDelayedSearch = () => {
+        clearTimeout(timeout);
+        reject(new Error('A listed official website succeeded.'));
+      };
+    },
   );
-  discoveredMosqueWebsiteCache.set(cacheKey, result.website);
+  const listedRequest = firstSuccessfulWebsiteSchedule(
+    listedWebsites,
+    mosque,
+  ).then((result): DiscoveredWebsiteScheduleResult => {
+    cancelDelayedSearch?.();
+    return { ...result, foundBySearch: false };
+  });
+  const result = await firstSuccessfulRequest([listedRequest, searchRequest]);
+  if (result.foundBySearch) {
+    discoveredMosqueWebsiteCache.set(cacheKey, result.website);
+  }
   return {
     ...result.schedule,
     officialWebsiteUrl: result.website,
-    sourceLabel: `${result.schedule.sourceLabel} · found by web search`,
+    sourceLabel: result.foundBySearch
+      ? `${result.schedule.sourceLabel} · found by web search`
+      : result.schedule.sourceLabel,
   };
 }
 
@@ -2437,15 +3128,17 @@ export async function fetchPrayerScheduleByAddress(
 }
 
 function normalizedMosqueName(value: string) {
-  return value
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+  return normalizeLocalizedWebsiteText(value)
     .toLocaleLowerCase()
     .replace(
-      /\b(mosque|masjid|islamic|muslim|centre|center|community|jamia|jami)\b/g,
+      /\b(mosque|masjid|islamic|muslim|centre|center|community|jamia|jami|mosquee|moschea|moschee|mezquita|mescit|camii)\b/g,
       ' ',
     )
-    .replace(/[^a-z0-9\u0600-\u06ff]+/g, ' ')
+    .replace(
+      /(?:مسجد|جامع|مركز\s+اسلامي|مرکز\s+اسلامی|মসজিদ|मस्जिद|मस्जिद|清真寺|モスク|모스크|мечеть|џамија|xhamia|msikiti)/giu,
+      ' ',
+    )
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
 }
 
@@ -2512,7 +3205,7 @@ export async function fetchMosqueIqamahSchedule(
 ): Promise<MosqueIqamahSchedule | null> {
   const response = await fetchWithTimeout(
     `https://takbeertime.com/api/mosques/nearby?lat=${mosque.latitude}&lng=${mosque.longitude}&radius=2500&limit=20`,
-    8000,
+    5000,
   );
   if (!response.ok) return null;
   const payload = await response.json();
@@ -2617,14 +3310,26 @@ export async function fetchMosqueIqamahSchedule(
   return null;
 }
 
-export async function fetchPublishedMosquePrayerSchedule(
+async function fetchPublishedMosquePrayerScheduleUncached(
   mosque: Mosque,
 ): Promise<PublishedMosquePrayerSchedule> {
   const [websiteResult, appResult, karbalaResult] = await Promise.allSettled([
-    fetchVerifiedMosqueWebsiteSchedule(mosque),
-    fetchMosqueIqamahSchedule(mosque),
+    settleWithin(
+      fetchVerifiedMosqueWebsiteSchedule(mosque),
+      15000,
+      'The mosque website lookup took too long.',
+    ),
+    settleWithin(
+      fetchMosqueIqamahSchedule(mosque),
+      5500,
+      'The schedule app lookup took too long.',
+    ),
     isKarbalaMosque(mosque)
-      ? fetchAlKafeelKarbalaPrayerSchedule(mosque)
+      ? settleWithin(
+          fetchAlKafeelKarbalaPrayerSchedule(mosque),
+          6500,
+          'The Karbala schedule lookup took too long.',
+        )
       : Promise.resolve(null),
   ]);
 
@@ -2687,4 +3392,76 @@ export async function fetchPublishedMosquePrayerSchedule(
       ? 'No published prayer schedule was found on this masjid’s website or supported schedule apps.'
       : 'This masjid has no published schedule in a supported app or official website listing.',
   );
+}
+
+type PublishedScheduleFetchOptions = {
+  forceRefresh?: boolean;
+};
+
+type PublishedScheduleCacheEntry = {
+  expiresAt: number;
+  schedule: PublishedMosquePrayerSchedule;
+};
+
+const PUBLISHED_SCHEDULE_CACHE_TTL_MS = 15 * 60 * 1000;
+const publishedScheduleCache = new Map<string, PublishedScheduleCacheEntry>();
+const publishedScheduleRequests = new Map<
+  string,
+  Promise<PublishedMosquePrayerSchedule>
+>();
+
+function localDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    '0',
+  )}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function publishedScheduleCacheKey(mosque: Mosque) {
+  return `${mosqueWebsiteCacheKey(mosque)}:${localDateKey()}`;
+}
+
+export function clearPublishedMosquePrayerScheduleCache() {
+  publishedScheduleCache.clear();
+  publishedScheduleRequests.clear();
+}
+
+export async function fetchPublishedMosquePrayerSchedule(
+  mosque: Mosque,
+  options: PublishedScheduleFetchOptions = {},
+): Promise<PublishedMosquePrayerSchedule> {
+  const cacheKey = publishedScheduleCacheKey(mosque);
+  const cached = publishedScheduleCache.get(cacheKey);
+  if (!options.forceRefresh && cached && cached.expiresAt > Date.now()) {
+    return cached.schedule;
+  }
+
+  const activeRequest = publishedScheduleRequests.get(cacheKey);
+  if (!options.forceRefresh && activeRequest) return activeRequest;
+
+  const networkRequest = fetchPublishedMosquePrayerScheduleUncached(
+    mosque,
+  ).then(schedule => {
+    publishedScheduleCache.set(cacheKey, {
+      expiresAt: Date.now() + PUBLISHED_SCHEDULE_CACHE_TTL_MS,
+      schedule,
+    });
+    return schedule;
+  });
+  const boundedRequest = settleWithin(
+    networkRequest,
+    16000,
+    'The published schedule lookup took too long.',
+  )
+    .catch(failure => {
+      if (cached) return cached.schedule;
+      throw failure;
+    })
+    .finally(() => {
+      if (publishedScheduleRequests.get(cacheKey) === boundedRequest) {
+        publishedScheduleRequests.delete(cacheKey);
+      }
+    });
+  publishedScheduleRequests.set(cacheKey, boundedRequest);
+  return boundedRequest;
 }

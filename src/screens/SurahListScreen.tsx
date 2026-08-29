@@ -58,7 +58,9 @@ export default function SurahListScreen({ navigation }: any) {
         <View style={styles.header}>
           <ScreenTitle
             title="The Quran"
-            subtitle={`114 surahs · ${totalAyahCount.toLocaleString()} ayahs · ${language.label} offline`}
+            subtitle={`114 surahs · ${totalAyahCount.toLocaleString()} ayahs · ${
+              language.label
+            } offline`}
           />
           <Pressable
             accessibilityRole="button"
@@ -142,10 +144,6 @@ export default function SurahListScreen({ navigation }: any) {
             </Text>
           ) : null}
         </View>
-        <Text style={[styles.attribution, theme.mutedText]}>
-          Hafs ‘an ‘Asim · Uthmani Arabic · {language.translator} · Quran JSON
-          CC BY-SA 4.0
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -221,11 +219,4 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, fontSize: 10, marginTop: 4 },
   arabic: { color: colors.ink, fontSize: 18 },
   empty: { color: colors.muted, textAlign: 'center', padding: 30 },
-  attribution: {
-    color: colors.muted,
-    fontSize: 9,
-    lineHeight: 14,
-    textAlign: 'center',
-    marginTop: 16,
-  },
 });

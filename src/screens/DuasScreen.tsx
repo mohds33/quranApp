@@ -16,28 +16,91 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
+import { useAppPreferences } from '../components/AppPreferencesContext';
+import { quranLanguageOptions, type QuranLanguageCode } from '../data/quran';
 
-const collections = [
+type LocalizedText = Record<QuranLanguageCode, string>;
+
+type DuaCollection = {
+  Icon: React.ComponentType<any>;
+  title: string;
+  count: string;
+  arabic: string;
+  translation: LocalizedText;
+  source?: string;
+};
+
+const dailyDua = {
+  arabic: 'رَبِّ زِدْنِي عِلْمًا',
+  source: 'Taha · 20:114',
+  translation: {
+    en: 'My Lord, increase me in knowledge.',
+    bn: 'হে আমার রব, আমার জ্ঞান বৃদ্ধি করুন।',
+    zh: '我的主啊，求你增加我的知识。',
+    es: 'Señor mío, aumenta mi conocimiento.',
+    fr: 'Seigneur, augmente mon savoir.',
+    id: 'Ya Tuhanku, tambahkanlah ilmuku.',
+    ru: 'Господи, увеличь мои знания.',
+    sv: 'Min Herre, öka min kunskap.',
+    tr: 'Rabbim, ilmimi artır.',
+    ur: 'اے میرے رب، میرے علم میں اضافہ فرما۔',
+  },
+};
+
+const collections: DuaCollection[] = [
   {
     Icon: CloudSun,
     title: 'Morning',
     count: '12 duas',
     arabic: 'اللَّهُمَّ بِكَ أَصْبَحْنَا',
-    translation: 'O Allah, by You we enter the morning.',
+    translation: {
+      en: 'O Allah, by You we enter the morning.',
+      bn: 'হে আল্লাহ, আপনার সাহায্যেই আমরা সকালে উপনীত হলাম।',
+      zh: '真主啊，凭借你我们进入清晨。',
+      es: 'Oh Allah, por Ti llegamos a la mañana.',
+      fr: 'O Allah, par Toi nous entrons dans le matin.',
+      id: 'Ya Allah, dengan pertolongan-Mu kami memasuki pagi.',
+      ru: 'О Аллах, благодаря Тебе мы встретили утро.',
+      sv: 'O Allah, genom Dig går vi in i morgonen.',
+      tr: 'Allahım, Seninle sabaha eriştik.',
+      ur: 'اے اللہ، تیرے ہی ذریعے ہم صبح میں داخل ہوئے۔',
+    },
   },
   {
     Icon: Moon,
     title: 'Evening',
     count: '14 duas',
     arabic: 'اللَّهُمَّ بِكَ أَمْسَيْنَا',
-    translation: 'O Allah, by You we enter the evening.',
+    translation: {
+      en: 'O Allah, by You we enter the evening.',
+      bn: 'হে আল্লাহ, আপনার সাহায্যেই আমরা সন্ধ্যায় উপনীত হলাম।',
+      zh: '真主啊，凭借你我们进入夜晚。',
+      es: 'Oh Allah, por Ti llegamos a la noche.',
+      fr: 'O Allah, par Toi nous entrons dans le soir.',
+      id: 'Ya Allah, dengan pertolongan-Mu kami memasuki petang.',
+      ru: 'О Аллах, благодаря Тебе мы встретили вечер.',
+      sv: 'O Allah, genom Dig går vi in i kvällen.',
+      tr: 'Allahım, Seninle akşama eriştik.',
+      ur: 'اے اللہ، تیرے ہی ذریعے ہم شام میں داخل ہوئے۔',
+    },
   },
   {
     Icon: Shield,
     title: 'Protection',
     count: '9 duas',
     arabic: 'أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ',
-    translation: 'I seek refuge in the perfect words of Allah.',
+    translation: {
+      en: 'I seek refuge in the perfect words of Allah.',
+      bn: 'আমি আল্লাহর পরিপূর্ণ কথাগুলোর আশ্রয় চাই।',
+      zh: '我求真主完美的话语庇护。',
+      es: 'Busco refugio en las palabras perfectas de Allah.',
+      fr: "Je cherche refuge dans les paroles parfaites d'Allah.",
+      id: 'Aku berlindung dengan kalimat-kalimat Allah yang sempurna.',
+      ru: 'Я ищу защиты в совершенных словах Аллаха.',
+      sv: 'Jag söker skydd i Allahs fullkomliga ord.',
+      tr: 'Allah’ın eksiksiz kelimelerine sığınırım.',
+      ur: 'میں اللہ کے کامل کلمات کی پناہ مانگتا ہوں۔',
+    },
   },
   {
     Icon: Home,
@@ -45,14 +108,29 @@ const collections = [
     count: '11 duas',
     arabic:
       'رَبَّنَا هَبْ لَنَا مِنْ أَزْوَاجِنَا وَذُرِّيَّاتِنَا قُرَّةَ أَعْيُنٍ',
-    translation:
-      'Our Lord, bless us with spouses and offspring who will be the joy of our hearts.',
+    translation: {
+      en: 'Our Lord, bless us with spouses and offspring who will be the joy of our hearts.',
+      bn: 'হে আমাদের রব, আমাদের জীবনসঙ্গী ও সন্তানদের আমাদের চোখের শীতলতা করুন।',
+      zh: '我们的主啊，求你使我们的配偶和子孙成为我们眼中的慰藉。',
+      es: 'Señor nuestro, concédenos cónyuges e hijos que sean alegría para nuestros corazones.',
+      fr: 'Notre Seigneur, accorde-nous des époux et des enfants qui réjouissent nos coeurs.',
+      id: 'Ya Tuhan kami, anugerahkanlah kepada kami pasangan dan keturunan yang menyejukkan hati.',
+      ru: 'Господи наш, даруй нам супругов и потомство, которые будут радостью для наших сердец.',
+      sv: 'Vår Herre, ge oss makar och barn som skänker våra hjärtan glädje.',
+      tr: 'Rabbimiz, eşlerimizi ve çocuklarımızı göz aydınlığı kıl.',
+      ur: 'اے ہمارے رب، ہمارے شریک حیات اور اولاد کو ہماری آنکھوں کی ٹھنڈک بنا۔',
+    },
   },
 ];
 
 export default function DuasScreen() {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
+  const { preferences } = useAppPreferences();
+  const activeLanguage =
+    quranLanguageOptions.find(
+      option => option.code === preferences.quranLanguage,
+    ) ?? quranLanguageOptions[0];
   const [selected, setSelected] = useState<string | null>(null);
   const [favourites, setFavourites] = useState<string[]>(['Morning']);
   const [showSaved, setShowSaved] = useState(false);
@@ -64,6 +142,8 @@ export default function DuasScreen() {
     [showSaved, favourites],
   );
   const selectedCollection = collections.find(item => item.title === selected);
+  const localized = (translation: LocalizedText) =>
+    translation[preferences.quranLanguage] ?? translation.en;
   const toggleFavourite = (title: string) =>
     setFavourites(items =>
       items.includes(title)
@@ -103,9 +183,15 @@ export default function DuasScreen() {
               <Text style={styles.label}>
                 {selectedCollection.title.toUpperCase()}
               </Text>
+              <View style={styles.languageHeader}>
+                <Text style={styles.languageLabel}>Arabic</Text>
+                <Text style={styles.languageMeta}>
+                  {activeLanguage.label} translation
+                </Text>
+              </View>
               <Text style={styles.arabic}>{selectedCollection.arabic}</Text>
               <Text style={styles.translation}>
-                {selectedCollection.translation}
+                {localized(selectedCollection.translation)}
               </Text>
               <Pressable
                 accessibilityRole="button"
@@ -135,34 +221,54 @@ export default function DuasScreen() {
             {!showSaved ? (
               <View style={styles.feature}>
                 <Text style={styles.label}>DUA OF THE DAY</Text>
-                <Text style={styles.arabic}>رَبِّ زِدْنِي عِلْمًا</Text>
+                <View style={styles.languageHeader}>
+                  <Text style={styles.languageLabel}>Arabic</Text>
+                  <Text style={styles.languageMeta}>
+                    {activeLanguage.label} translation
+                  </Text>
+                </View>
+                <Text style={styles.arabic}>{dailyDua.arabic}</Text>
                 <Text style={styles.translation}>
-                  My Lord, increase me in knowledge.
+                  {localized(dailyDua.translation)}
                 </Text>
-                <Text style={styles.source}>Taha · 20:114</Text>
+                <Text style={styles.source}>{dailyDua.source}</Text>
               </View>
             ) : null}
             <Text style={[styles.section, theme.mutedText]}>
               {showSaved ? 'FAVOURITES' : 'COLLECTIONS'}
             </Text>
             <View style={styles.grid}>
-              {visibleCollections.map(({ Icon, title, count }) => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${title} duas`}
-                  onPress={() => setSelected(title)}
-                  key={title}
-                  style={[styles.card, theme.card]}
-                >
-                  <View
-                    style={[styles.icon, { backgroundColor: palette.mint }]}
+              {visibleCollections.map(
+                ({ Icon, title, count, arabic, translation }) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${title} duas`}
+                    onPress={() => setSelected(title)}
+                    key={title}
+                    style={[styles.card, theme.card]}
                   >
-                    <Icon size={22} color={palette.green} />
-                  </View>
-                  <Text style={[styles.title, theme.text]}>{title}</Text>
-                  <Text style={[styles.count, theme.mutedText]}>{count}</Text>
-                </Pressable>
-              ))}
+                    <View
+                      style={[styles.icon, { backgroundColor: palette.mint }]}
+                    >
+                      <Icon size={22} color={palette.green} />
+                    </View>
+                    <Text style={[styles.title, theme.text]}>{title}</Text>
+                    <Text style={[styles.count, theme.mutedText]}>{count}</Text>
+                    <Text
+                      numberOfLines={2}
+                      style={[styles.cardArabic, theme.text]}
+                    >
+                      {arabic}
+                    </Text>
+                    <Text
+                      numberOfLines={2}
+                      style={[styles.cardTranslation, theme.mutedText]}
+                    >
+                      {localized(translation)}
+                    </Text>
+                  </Pressable>
+                ),
+              )}
             </View>
             {showSaved && !visibleCollections.length ? (
               <Text style={[styles.empty, theme.mutedText]}>
@@ -227,11 +333,34 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.2,
   },
+  languageHeader: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#FFFFFF22',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 18,
+    paddingVertical: 9,
+  },
+  languageLabel: {
+    color: colors.gold,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  languageMeta: {
+    color: '#BCD3CB',
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   arabic: {
     color: colors.white,
     fontSize: 29,
     textAlign: 'right',
     lineHeight: 46,
+    writingDirection: 'rtl',
     marginTop: 17,
   },
   translation: {
@@ -256,7 +385,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 18 },
-  card: { ...shared.card, width: '48%', padding: 17 },
+  card: { ...shared.card, flexBasis: '47%', flexGrow: 1, padding: 17 },
   icon: {
     width: 41,
     height: 41,
@@ -267,6 +396,21 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.ink, fontSize: 15, fontWeight: '700', marginTop: 14 },
   count: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  cardArabic: {
+    color: colors.ink,
+    fontSize: 16,
+    lineHeight: 25,
+    marginTop: 13,
+    minHeight: 50,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  cardTranslation: {
+    color: colors.muted,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 8,
+  },
   saved: {
     ...shared.card,
     padding: 18,

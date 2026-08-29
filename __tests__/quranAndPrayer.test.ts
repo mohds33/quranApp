@@ -1,11 +1,22 @@
 import { surahs, totalAyahCount } from '../src/data/quran';
+import {
+  getAyahRecitationUrl,
+  getSurahRecitationUrl,
+} from '../src/services/quranAudio';
 import { parseMosqueSearchCache } from '../src/services/mosqueSearchCache';
+import { validSavedPreferences } from '../src/components/AppPreferencesContext';
 import {
   calculatePrayerSchedule,
+  clearPublishedMosquePrayerScheduleCache,
+  DARUL_ILMI_EDMONTON_WEBSITE_URL,
   extractEmbeddedPrayerScheduleData,
+  extractOfficialWebsiteLinks,
   extractMosqueWebsiteSearchCandidates,
   extractPrayerDataEndpoints,
   extractPrayerScheduleLinks,
+  fetchPublishedMosquePrayerSchedule,
+  getNextPrayerOccurrence,
+  knownOfficialMosqueWebsite,
   mosqueCity,
   parseAlFaruqPrayerTimesPayload,
   parseAlKafeelKarbalaPrayerPayload,
@@ -28,6 +39,15 @@ test('bundles the complete Quran', () => {
   expect(surahs[0].ayahs).toHaveLength(7);
   expect(surahs[1].ayahs).toHaveLength(286);
   expect(surahs[113].ayahs).toHaveLength(6);
+});
+
+test('builds Quran recitation CDN urls', () => {
+  expect(getSurahRecitationUrl('2')).toBe(
+    'https://cdn.islamic.network/quran/audio-surah/128/ar.alafasy/2.mp3',
+  );
+  expect(getAyahRecitationUrl(262)).toBe(
+    'https://cdn.islamic.network/quran/audio/128/ar.alafasy/262.mp3',
+  );
 });
 
 test('restores the last mosque search with the closest masjid first', () => {
@@ -70,6 +90,49 @@ test('restores the last mosque search with the closest masjid first', () => {
   expect(parseMosqueSearchCache('{invalid')).toBeNull();
 });
 
+test('restores a saved home masjid and its daily published schedule', () => {
+  const saved = validSavedPreferences({
+    homeMosque: {
+      id: 'home-masjid',
+      name: 'Home Masjid',
+      address: '123 Main Street',
+      latitude: 53.5,
+      longitude: -113.5,
+      distanceKm: 4.2,
+      website: 'https://example.com',
+      source: 'apple',
+    },
+    homeMosqueSchedule: {
+      mosqueId: 'home-masjid',
+      refreshedOn: '2026-08-28',
+      schedule: {
+        adhan: { Fajr: '5:15 AM' },
+        iqamah: { Fajr: '5:45 AM' },
+        jummah: ['1:30 PM'],
+        sourceName: 'Home Masjid',
+        sourceUrl: 'https://example.com/prayer-times',
+        sourceLabel: 'Official website',
+        verified: true,
+        fetchedAt: '2026-08-28T12:00:00.000Z',
+      },
+    },
+  });
+
+  expect(saved.homeMosque?.id).toBe('home-masjid');
+  expect(saved.homeMosqueSchedule?.mosqueId).toBe('home-masjid');
+  expect(saved.homeMosqueSchedule?.schedule.iqamah.Fajr).toBe('5:45 AM');
+
+  const mismatched = validSavedPreferences({
+    homeMosque: saved.homeMosque,
+    homeMosqueSchedule: {
+      ...saved.homeMosqueSchedule,
+      mosqueId: 'different-masjid',
+    },
+  });
+  expect(mismatched.homeMosque?.id).toBe('home-masjid');
+  expect(mismatched.homeMosqueSchedule).toBeNull();
+});
+
 test('calculates a complete daily prayer schedule offline', () => {
   const schedule = calculatePrayerSchedule(
     { latitude: 53.5461, longitude: -113.4938 },
@@ -81,6 +144,17 @@ test('calculates a complete daily prayer schedule offline', () => {
     expect(schedule.timings[prayer]).not.toBe('—');
   }
   expect(schedule.methodName).toContain('ISNA');
+});
+
+test("wraps the next prayer to tomorrow's Fajr after Isha", () => {
+  const origin = { latitude: 53.5461, longitude: -113.4938 };
+  const now = new Date(2026, 7, 2, 23, 59);
+  const schedule = calculatePrayerSchedule(origin, now);
+  const next = getNextPrayerOccurrence(schedule, origin, now);
+
+  expect(next.name).toBe('Fajr');
+  expect(next.date.getTime()).toBeGreaterThan(now.getTime());
+  expect(next.timing).not.toBe('—');
 });
 
 test('parses Masjid Ayesha published adhan, iqamah, and Jumuah times', () => {
@@ -398,6 +472,44 @@ test('finds the first credible official website and rejects directories', () => 
   expect(candidates).toEqual(['https://alrashidfoundation.ca/']);
 });
 
+test('extracts an official mosque website hidden behind a social redirect', () => {
+  const candidates = extractOfficialWebsiteLinks(
+    `
+      <a href="https://l.facebook.com/l.php?u=https%3A%2F%2Fwww.darulilmimasjid.ca%2F&amp;h=tracking">
+        الموقع الرسمي
+      </a>
+      <a href="https://www.facebook.com/darulilmimasjid/">Facebook</a>
+    `,
+    'https://www.facebook.com/darulilmimasjid/',
+  );
+
+  expect(candidates).toEqual([DARUL_ILMI_EDMONTON_WEBSITE_URL]);
+});
+
+test('recognizes Darul Ilmi Edmonton in English and Arabic map listings', () => {
+  const baseMosque = {
+    id: 'darul-ilmi-edmonton',
+    address: '4225 118 Avenue Northwest, Edmonton, AB T5W 1A5',
+    latitude: 53.5704,
+    longitude: -113.408,
+    distanceKm: 1,
+  };
+
+  expect(
+    knownOfficialMosqueWebsite({
+      ...baseMosque,
+      name: 'Darul Ilmi Masjid',
+      website: 'https://www.facebook.com/darulilmimasjid/',
+    }),
+  ).toBe(DARUL_ILMI_EDMONTON_WEBSITE_URL);
+  expect(
+    knownOfficialMosqueWebsite({
+      ...baseMosque,
+      name: 'مسجد دار العلم',
+    }),
+  ).toBe(DARUL_ILMI_EDMONTON_WEBSITE_URL);
+});
+
 test('extracts Karbala from English and Arabic international addresses', () => {
   const mosque = {
     id: 'karbala-city',
@@ -615,6 +727,149 @@ test.each([
   expect(schedule.adhan.Maghrib).toBe('8:45 PM');
   expect(schedule.iqamah.Isha).toBe('10:15 PM');
   expect(schedule.jummah).toEqual(['1:30 PM', '2:30 PM']);
+});
+
+test('reads Russian prayer labels from malformed HTML tables', () => {
+  const schedule = parsePublishedMosqueWebsiteHTML(
+    `
+      <h1>Время намаза</h1>
+      <table>
+        <tr><td>Фаджр<td>05:10<td>05:30
+        <tr><td>Зухр<td>13:15<td>13:30
+        <tr><td>Аср<td>17:00<td>17:15
+        <tr><td>Магриб<td>20:45<td>20:50
+        <tr><td>Иша<td>22:00<td>22:15
+      </table>
+      <div>Джума 13:30 14:30</div>
+    `,
+    {
+      id: 'russian-mosque',
+      name: 'Мечеть Аль Ихлас',
+      address: 'Москва, Россия',
+      latitude: 55.75,
+      longitude: 37.61,
+      distanceKm: 1,
+      website: 'https://russian.example/',
+    },
+  );
+
+  expect(schedule.adhan.Fajr).toBe('05:10 AM');
+  expect(schedule.iqamah.Dhuhr).toBe('1:30 PM');
+  expect(schedule.iqamah.Isha).toBe('10:15 PM');
+  expect(schedule.jummah).toEqual(['1:30 PM', '2:30 PM']);
+});
+
+test('reads Chinese prayer labels, full-width digits, and localized day periods', () => {
+  const schedule = parsePublishedMosqueWebsiteHTML(
+    `
+      <h1>礼拜时间</h1>
+      <div>晨礼 上午 ５:１０ 上午 ５:３０</div>
+      <div>晌礼 下午 １:１５ 下午 １:３０</div>
+      <div>晡礼 下午 ５:００ 下午 ５:１５</div>
+      <div>昏礼 下午 ８:４５ 下午 ８:５０</div>
+      <div>宵礼 下午 １０:００ 下午 １０:１５</div>
+      <div>主麻 下午 １:３０ 下午 ２:３０</div>
+    `,
+    {
+      id: 'chinese-mosque',
+      name: '清真寺',
+      address: '上海, 中国',
+      latitude: 31.23,
+      longitude: 121.47,
+      distanceKm: 1,
+      website: 'https://chinese.example/',
+    },
+  );
+
+  expect(schedule.adhan.Fajr).toBe('05:10 AM');
+  expect(schedule.iqamah.Dhuhr).toBe('01:30 PM');
+  expect(schedule.adhan.Maghrib).toBe('08:45 PM');
+  expect(schedule.iqamah.Isha).toBe('10:15 PM');
+  expect(schedule.jummah).toEqual(['01:30 PM', '02:30 PM']);
+});
+
+test('reads localized prayer names and fields from structured website data', () => {
+  const schedule = parsePublishedMosqueWebsiteData(
+    {
+      prayers: [
+        { молитва: 'Фаджр', начало: '05:10', икамат: '05:30' },
+        { молитва: 'Зухр', начало: '13:15', икамат: '13:30' },
+        { молитва: 'Аср', начало: '17:00', икамат: '17:15' },
+        { молитва: 'Магриб', начало: '20:45', икамат: '20:50' },
+        { молитва: 'Иша', начало: '22:00', икамат: '22:15' },
+      ],
+    },
+    {
+      id: 'localized-json',
+      name: 'Localized JSON Mosque',
+      address: 'Edmonton, Alberta',
+      latitude: 53.5,
+      longitude: -113.5,
+      distanceKm: 1,
+    },
+    'https://localized-json.example/api/prayers',
+  );
+
+  expect(schedule.adhan.Fajr).toBe('05:10 AM');
+  expect(schedule.iqamah.Dhuhr).toBe('1:30 PM');
+  expect(schedule.adhan.Maghrib).toBe('8:45 PM');
+  expect(schedule.iqamah.Isha).toBe('10:15 PM');
+});
+
+test('deduplicates concurrent schedule loads and reuses the short-term cache', async () => {
+  clearPublishedMosquePrayerScheduleCache();
+  const originalFetch = globalThis.fetch;
+  const websiteHTML = `
+    <title>Cache Test Mosque</title>
+    <div>Fajr 05:10 05:30</div>
+    <div>Dhuhr 13:15 13:30</div>
+    <div>Asr 17:00 17:15</div>
+    <div>Maghrib 20:45 20:50</div>
+    <div>Isha 22:00 22:15</div>
+  `;
+  const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('takbeertime.com')) {
+      return {
+        ok: true,
+        url,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ data: [] }),
+      } as any;
+    }
+    return {
+      ok: true,
+      url,
+      headers: { get: () => 'text/html' },
+      text: async () => websiteHTML,
+    } as any;
+  });
+  globalThis.fetch = fetchMock as typeof fetch;
+  const mosque = {
+    id: 'cache-test',
+    name: 'Cache Test Mosque',
+    address: 'Edmonton, Alberta',
+    latitude: 53.5,
+    longitude: -113.5,
+    distanceKm: 1,
+    website: 'https://cache-test.example/',
+  };
+
+  try {
+    const [first, duplicate] = await Promise.all([
+      fetchPublishedMosquePrayerSchedule(mosque),
+      fetchPublishedMosquePrayerSchedule(mosque),
+    ]);
+    const cached = await fetchPublishedMosquePrayerSchedule(mosque);
+
+    expect(first.adhan.Fajr).toBe('05:10 AM');
+    expect(duplicate).toEqual(first);
+    expect(cached).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearPublishedMosquePrayerScheduleCache();
+  }
 });
 
 test('finds an official Masjidbox widget linked by a mosque website', () => {

@@ -12,8 +12,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
+  Check,
   Clock3,
   ExternalLink,
+  Home,
   MapPin,
   Navigation,
   RefreshCw,
@@ -27,6 +29,7 @@ import {
 } from '../components/DesignSystem';
 import { useSelectedMosque } from '../components/SelectedMosqueContext';
 import {
+  findOfficialMosqueWebsite,
   fetchPublishedMosquePrayerSchedule,
   masjidAyeshaPrayerNames,
   PublishedMosquePrayerSchedule,
@@ -35,34 +38,56 @@ import {
 export default function MosqueDetailScreen({ navigation, route }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { selectMosque } = useSelectedMosque();
+  const { selectedMosque, selectMosque } = useSelectedMosque();
   const { mosque } = route.params;
+  const isHomeMosque = selectedMosque?.id === mosque.id;
   const [schedule, setSchedule] =
     useState<PublishedMosquePrayerSchedule | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [discoveredWebsiteUrl, setDiscoveredWebsiteUrl] = useState('');
 
-  const loadSchedule = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    setSchedule(null);
-    try {
-      setSchedule(await fetchPublishedMosquePrayerSchedule(mosque));
-    } catch (failure) {
-      setError(
-        failure instanceof Error
-          ? failure.message
-          : 'No published schedule could be loaded for this masjid.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [mosque]);
+  const loadSchedule = useCallback(
+    async (forceRefresh = false) => {
+      setLoading(true);
+      setError('');
+      setSchedule(null);
+      try {
+        setSchedule(
+          await fetchPublishedMosquePrayerSchedule(mosque, { forceRefresh }),
+        );
+      } catch (failure) {
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : 'No published schedule could be loaded for this masjid.',
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mosque],
+  );
 
   useEffect(() => {
-    selectMosque(mosque);
     loadSchedule();
-  }, [loadSchedule, mosque, selectMosque]);
+  }, [loadSchedule]);
+
+  useEffect(() => {
+    let active = true;
+    setDiscoveredWebsiteUrl('');
+    findOfficialMosqueWebsite(mosque)
+      .then(website => {
+        if (active) setDiscoveredWebsiteUrl(website);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [mosque]);
+
+  const verifiedWebsiteUrl =
+    schedule?.officialWebsiteUrl ?? discoveredWebsiteUrl;
 
   const directions = () =>
     Linking.openURL(
@@ -71,12 +96,12 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
         : `https://www.google.com/maps/dir/?api=1&destination=${mosque.latitude},${mosque.longitude}`,
     );
 
-  const showOnPrayerTab = () => {
-    selectMosque(mosque);
-    navigation.getParent()?.navigate('Prayer');
+  const setHomeMasjid = () => {
+    selectMosque(
+      verifiedWebsiteUrl ? { ...mosque, website: verifiedWebsiteUrl } : mosque,
+      schedule ?? undefined,
+    );
   };
-
-  const verifiedWebsiteUrl = schedule?.officialWebsiteUrl;
 
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
@@ -121,14 +146,23 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
             <Text style={styles.actionText}>Directions</Text>
           </Pressable>
           <Pressable
-            accessibilityLabel={`Use ${mosque.name} on the Prayer tab`}
+            accessibilityLabel={
+              isHomeMosque
+                ? `${mosque.name} is already your home masjid`
+                : `Set ${mosque.name} as your home masjid`
+            }
             accessibilityRole="button"
-            onPress={showOnPrayerTab}
+            disabled={isHomeMosque}
+            onPress={setHomeMasjid}
             style={[styles.action, styles.prayerAction, theme.card]}
           >
-            <Clock3 size={17} color={palette.green} />
+            {isHomeMosque ? (
+              <Check size={17} color={palette.green} />
+            ) : (
+              <Home size={17} color={palette.green} />
+            )}
             <Text style={[styles.prayerActionText, { color: palette.green }]}>
-              Prayer tab
+              {isHomeMosque ? 'Home masjid' : 'Set home'}
             </Text>
           </Pressable>
         </View>
@@ -162,7 +196,7 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
             accessibilityRole="button"
             disabled={loading}
             hitSlop={8}
-            onPress={loadSchedule}
+            onPress={() => loadSchedule(true)}
           >
             {loading ? (
               <ActivityIndicator color={palette.green} size="small" />
