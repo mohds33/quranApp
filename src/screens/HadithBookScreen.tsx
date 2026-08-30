@@ -173,6 +173,8 @@ export default function HadithBookScreen({ navigation, route }: any) {
         <Text style={styles.coverTitle}>{book.title}</Text>
         <Text style={styles.coverMeta}>
           {book.sizeLabel} · {book.category}
+          {' · '}
+          {book.tradition}
         </Text>
       </View>
       <Text style={[styles.description, theme.mutedText]}>
@@ -264,12 +266,31 @@ export default function HadithBookScreen({ navigation, route }: any) {
               isDark ? styles.previewNoteDark : styles.previewNoteLight,
             ]}
           >
-            <Text style={styles.previewTitle}>OFFLINE READER PREVIEW</Text>
-            <Text style={[styles.previewText, theme.text]}>
-              This collection currently includes a curated preview. The two
-              Sahih collections contain their complete Arabic and English
-              readers. Preview translations follow your selected app language.
+            <Text style={styles.previewTitle}>
+              {book.readerUrl ? 'SOURCE READER' : 'CURATED PREVIEW'}
             </Text>
+            <Text style={[styles.previewText, theme.text]}>
+              {book.readerUrl
+                ? `This ${book.tradition} collection is available from ${
+                    book.readerSource ?? 'its source library'
+                  }. Open the source reader for its available volumes, translations, and grading notes.`
+                : book.samples.length
+                ? 'This collection currently includes a curated preview. Preview translations follow your selected app language.'
+                : 'A complete, licensed digital reader is not connected for this collection yet.'}
+            </Text>
+            {book.readerUrl ? (
+              <Pressable
+                accessibilityLabel={`Open ${book.title} on ${book.readerSource}`}
+                accessibilityRole="link"
+                onPress={() => Linking.openURL(book.readerUrl!)}
+                style={styles.sourceReader}
+              >
+                <ExternalLink size={15} color={colors.white} />
+                <Text style={styles.sourceReaderText}>
+                  Open {book.readerSource ?? 'source reader'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
           {book.samples.map(hadith => (
             <SampleHadithCard
@@ -309,8 +330,8 @@ export default function HadithBookScreen({ navigation, route }: any) {
                   Loading the full collection…
                 </Text>
                 <Text style={[styles.loadText, theme.mutedText]}>
-                  The first download is about 12 MB. It stays cached while the
-                  app is open.
+                  The first download size varies by collection. It stays cached
+                  while the app is open.
                 </Text>
               </>
             ) : (
@@ -344,7 +365,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
       <View style={[styles.fullNote, { backgroundColor: palette.mint }]}>
         <View style={styles.fullNoteTop}>
           <Text style={[styles.fullLabel, { color: palette.green }]}>
-            FULL SAHIH COLLECTION
+            FULL COLLECTION
           </Text>
           <Text style={[styles.fullCount, { color: palette.green }]}>
             {fullBook.length.toLocaleString()} hadith
@@ -607,6 +628,17 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 6,
   },
+  sourceReader: {
+    minHeight: 42,
+    borderRadius: 8,
+    backgroundColor: colors.green,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 14,
+  },
+  sourceReaderText: { color: colors.white, fontSize: 11, fontWeight: '800' },
   fullNote: { borderRadius: 19, padding: 16, marginBottom: 12 },
   fullNoteTop: {
     flexDirection: 'row',

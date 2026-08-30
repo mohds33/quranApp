@@ -1,4 +1,21 @@
-export type FullSahihId = 'bukhari' | 'muslim';
+export type FullHadithSourceId =
+  | 'bukhari'
+  | 'muslim'
+  | 'abudawud'
+  | 'tirmidhi'
+  | 'nasai'
+  | 'ibnmajah'
+  | 'muwatta'
+  | 'musnadahmad'
+  | 'darimi'
+  | 'riyad'
+  | 'shamail'
+  | 'bulugh'
+  | 'adab'
+  | 'mishkat'
+  | 'nawawi40'
+  | 'qudsi40'
+  | 'shahwaliullah40';
 
 export type HadithChapter = {
   id: number;
@@ -25,34 +42,49 @@ export type FullHadithBook = {
   hadiths: FullHadith[];
 };
 
-const sources: Record<
-  FullSahihId,
-  { dataUrl: string; sourceUrl: string; version: string }
-> = {
-  bukhari: {
-    dataUrl:
-      'https://raw.githubusercontent.com/AhmedBaset/hadith-json/v1.2.0/db/by_book/the_9_books/bukhari.json',
-    sourceUrl: 'https://github.com/AhmedBaset/hadith-json/tree/v1.2.0',
-    version: 'v1.2.0',
-  },
-  muslim: {
-    dataUrl:
-      'https://raw.githubusercontent.com/AhmedBaset/hadith-json/v1.2.0/db/by_book/the_9_books/muslim.json',
-    sourceUrl: 'https://github.com/AhmedBaset/hadith-json/tree/v1.2.0',
-    version: 'v1.2.0',
-  },
+const sourceRoot =
+  'https://raw.githubusercontent.com/AhmedBaset/hadith-json/v1.2.0/db/by_book';
+const sourceUrl = 'https://github.com/AhmedBaset/hadith-json/tree/v1.2.0';
+const sourcePaths: Record<FullHadithSourceId, string> = {
+  bukhari: 'the_9_books/bukhari.json',
+  muslim: 'the_9_books/muslim.json',
+  abudawud: 'the_9_books/abudawud.json',
+  tirmidhi: 'the_9_books/tirmidhi.json',
+  nasai: 'the_9_books/nasai.json',
+  ibnmajah: 'the_9_books/ibnmajah.json',
+  muwatta: 'the_9_books/malik.json',
+  musnadahmad: 'the_9_books/ahmed.json',
+  darimi: 'the_9_books/darimi.json',
+  riyad: 'other_books/riyad_assalihin.json',
+  shamail: 'other_books/shamail_muhammadiyah.json',
+  bulugh: 'other_books/bulugh_almaram.json',
+  adab: 'other_books/aladab_almufrad.json',
+  mishkat: 'other_books/mishkat_almasabih.json',
+  nawawi40: 'forties/nawawi40.json',
+  qudsi40: 'forties/qudsi40.json',
+  shahwaliullah40: 'forties/shahwaliullah40.json',
 };
 
-const cache: Partial<Record<FullSahihId, FullHadithBook>> = {};
+const sources = Object.fromEntries(
+  Object.entries(sourcePaths).map(([id, path]) => [
+    id,
+    { dataUrl: `${sourceRoot}/${path}`, sourceUrl, version: 'v1.2.0' },
+  ]),
+) as Record<
+  FullHadithSourceId,
+  { dataUrl: string; sourceUrl: string; version: string }
+>;
+
+const cache: Partial<Record<FullHadithSourceId, FullHadithBook>> = {};
 
 export function getFullSahihSource(bookId: string) {
-  return sources[bookId as FullSahihId];
+  return sources[bookId as FullHadithSourceId];
 }
 
 export async function fetchFullSahihBook(
   bookId: string,
 ): Promise<FullHadithBook> {
-  const id = bookId as FullSahihId;
+  const id = bookId as FullHadithSourceId;
   const source = sources[id];
   if (!source) throw new Error('A complete reader is not available yet.');
   if (cache[id]) return cache[id];
