@@ -400,26 +400,6 @@ export default function PrayerTimesScreen({ navigation }: any) {
           )}
         </View>
 
-        <Pressable
-          accessibilityLabel="Open full prayer tracking history"
-          accessibilityRole="button"
-          onPress={() => navigation.navigate('PrayerHistory')}
-          style={[styles.historyCard, theme.card]}
-        >
-          <View style={styles.historyHeader}>
-            <View>
-              <Text style={[styles.historyTitle, theme.text]}>
-                Prayer tracking
-              </Text>
-              <Text style={[styles.historySubtitle, theme.mutedText]}>
-                Last 7 days
-              </Text>
-            </View>
-            <ChartColumn size={20} color={palette.green} />
-          </View>
-          <PrayerHistoryChart logs={preferences.prayerLogs} />
-        </Pressable>
-
         {schedule?.jummah.length ? (
           <View style={[styles.jummahCard, theme.card]}>
             <View>
@@ -443,6 +423,27 @@ export default function PrayerTimesScreen({ navigation }: any) {
             </View>
           </View>
         ) : null}
+
+
+        <Pressable
+          accessibilityLabel="Open full prayer tracking history"
+          accessibilityRole="button"
+          onPress={() => navigation.navigate('PrayerHistory')}
+          style={[styles.historyCard, theme.card]}
+        >
+          <View style={styles.historyHeader}>
+            <View>
+              <Text style={[styles.historyTitle, theme.text]}>
+                Prayer tracking
+              </Text>
+              <Text style={[styles.historySubtitle, theme.mutedText]}>
+                Last 7 days
+              </Text>
+            </View>
+            <ChartColumn size={20} color={palette.green} />
+          </View>
+          <PrayerHistoryChart logs={preferences.prayerLogs} />
+        </Pressable>
 
         {schedule ? (
           <Pressable
