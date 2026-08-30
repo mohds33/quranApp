@@ -79,10 +79,10 @@ typedef void (^RCTRenderedWebsiteReaderCompletion)(RCTRenderedWebsiteReader *rea
   self.webView.customUserAgent = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148";
   [self.webView loadRequest:[NSURLRequest requestWithURL:self.url
                                              cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                                         timeoutInterval:15.0]];
+                                         timeoutInterval:9.0]];
 
   __weak RCTRenderedWebsiteReader *weakSelf = self;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(18.0 * NSEC_PER_SEC)),
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(11.5 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
     RCTRenderedWebsiteReader *strongSelf = weakSelf;
     if (strongSelf == nil || strongSelf.completed) {
@@ -131,7 +131,7 @@ typedef void (^RCTRenderedWebsiteReaderCompletion)(RCTRenderedWebsiteReader *rea
 {
   self.readAttempts = 0;
   __weak RCTRenderedWebsiteReader *weakSelf = self;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
     RCTRenderedWebsiteReader *strongSelf = weakSelf;
     if (strongSelf == nil || strongSelf.completed) {
@@ -162,6 +162,12 @@ typedef void (^RCTRenderedWebsiteReaderCompletion)(RCTRenderedWebsiteReader *rea
         [normalizedText containsString:@"subuh"] ||
         [normalizedText containsString:@"subax"] ||
         [normalizedText containsString:@"sabah"] ||
+        [normalizedText containsString:@"alfajiri"] ||
+        [normalizedText containsString:@"фаджр"] ||
+        [normalizedText containsString:@"晨礼"] ||
+        [normalizedText containsString:@"晨禮"] ||
+        [normalizedText containsString:@"ファジュル"] ||
+        [normalizedText containsString:@"फ़ज्र"] ||
         [normalizedText containsString:@"الفجر"] ||
         [normalizedText containsString:@"فجر"] ||
         [normalizedText containsString:@"ফজর"];
@@ -174,13 +180,22 @@ typedef void (^RCTRenderedWebsiteReaderCompletion)(RCTRenderedWebsiteReader *rea
         [normalizedText containsString:@"cisho"] ||
         [normalizedText containsString:@"yats"] ||
         [normalizedText containsString:@"aksam"] ||
+        [normalizedText containsString:@"ischa"] ||
+        [normalizedText containsString:@"иша"] ||
+        [normalizedText containsString:@"магриб"] ||
+        [normalizedText containsString:@"宵礼"] ||
+        [normalizedText containsString:@"宵禮"] ||
+        [normalizedText containsString:@"昏礼"] ||
+        [normalizedText containsString:@"昏禮"] ||
+        [normalizedText containsString:@"イシャ"] ||
+        [normalizedText containsString:@"マグリブ"] ||
         [normalizedText containsString:@"العشاء"] ||
         [normalizedText containsString:@"المغرب"] ||
         [normalizedText containsString:@"ইশা"];
     BOOL hasPrayerNames = hasFajr && hasLatePrayer;
     BOOL hasTimes = [visibleText rangeOfCharacterFromSet:[NSCharacterSet decimalDigitCharacterSet]].location != NSNotFound;
-    if ((!hasPrayerNames || !hasTimes) && strongSelf.readAttempts < 6) {
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+    if ((!hasPrayerNames || !hasTimes) && strongSelf.readAttempts < 4) {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)),
                      dispatch_get_main_queue(), ^{
         [strongSelf attemptRenderedPageRead];
       });

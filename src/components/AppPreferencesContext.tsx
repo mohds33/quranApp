@@ -13,12 +13,23 @@ import {
   ResolvedLocation,
   reverseGeocodeCoordinates,
 } from '../services/location';
-import type { CalculationMethodKey } from '../services/prayerTimes';
-import type { QuranLanguageCode } from '../data/quran';
+import type { Mosque } from '../services/mosques';
+import {
+  calculationMethodOptions,
+  type CalculationMethodKey,
+  type PublishedMosquePrayerSchedule,
+} from '../services/prayerTimes';
+import { quranLanguageOptions, type QuranLanguageCode } from '../data/quran';
 
 export type LocationMode = 'device' | 'custom';
 export type PrayerTimeSource = 'closestMosque' | 'calculated';
 export type QuranReadingKey = 'hafs';
+
+export type SavedHomeMosqueSchedule = {
+  mosqueId: string;
+  refreshedOn: string;
+  schedule: PublishedMosquePrayerSchedule;
+};
 
 export type AppPreferences = {
   locationMode: LocationMode;
@@ -27,6 +38,8 @@ export type AppPreferences = {
   calculationMethod: CalculationMethodKey;
   quranLanguage: QuranLanguageCode;
   quranReading: QuranReadingKey;
+  homeMosque: Mosque | null;
+  homeMosqueSchedule: SavedHomeMosqueSchedule | null;
 };
 
 const defaultPreferences: AppPreferences = {
@@ -36,6 +49,8 @@ const defaultPreferences: AppPreferences = {
   calculationMethod: 'northAmerica',
   quranLanguage: 'en',
   quranReading: 'hafs',
+  homeMosque: null,
+  homeMosqueSchedule: null,
 };
 
 type AppPreferencesContextValue = {
@@ -45,6 +60,7 @@ type AppPreferencesContextValue = {
   deviceLocation: ResolvedLocation | null;
   locationLoading: boolean;
   locationError: string;
+  preferencesRestored: boolean;
   refreshDeviceLocation: () => Promise<void>;
 };
 
@@ -55,11 +71,113 @@ const AppPreferencesContext = createContext<AppPreferencesContextValue>({
   deviceLocation: null,
   locationLoading: false,
   locationError: '',
+  preferencesRestored: false,
   refreshDeviceLocation: async () => undefined,
 });
 
-function validSavedPreferences(value: any): Partial<AppPreferences> {
+function validSavedMosque(value: any): Mosque | null {
+  if (
+    typeof value?.id !== 'string' ||
+    typeof value?.name !== 'string' ||
+    typeof value?.address !== 'string' ||
+    !Number.isFinite(value?.latitude) ||
+    !Number.isFinite(value?.longitude) ||
+    Math.abs(value.latitude) > 90 ||
+    Math.abs(value.longitude) > 180
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    address: value.address,
+    latitude: value.latitude,
+    longitude: value.longitude,
+    distanceKm: Number.isFinite(value.distanceKm) ? value.distanceKm : 0,
+    website: typeof value.website === 'string' ? value.website : undefined,
+    websiteCandidates: Array.isArray(value.websiteCandidates)
+      ? value.websiteCandidates.filter(
+          (candidate: unknown): candidate is string =>
+            typeof candidate === 'string',
+        )
+      : undefined,
+    phone: typeof value.phone === 'string' ? value.phone : undefined,
+    source:
+      value.source === 'apple' ||
+      value.source === 'openstreetmap' ||
+      value.source === 'saved'
+        ? value.source
+        : undefined,
+  };
+}
+
+function validSavedPublishedSchedule(
+  value: any,
+): PublishedMosquePrayerSchedule | null {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    typeof value.sourceName !== 'string' ||
+    typeof value.sourceUrl !== 'string' ||
+    typeof value.sourceLabel !== 'string' ||
+    typeof value.verified !== 'boolean' ||
+    typeof value.fetchedAt !== 'string' ||
+    !Array.isArray(value.jummah)
+  ) {
+    return null;
+  }
+  const validTimes = (times: any) =>
+    Object.fromEntries(
+      Object.entries(times ?? {}).filter(
+        ([, time]) => typeof time === 'string',
+      ),
+    );
+  return {
+    adhan: validTimes(value.adhan),
+    iqamah: validTimes(value.iqamah),
+    jummah: value.jummah.filter(
+      (time: unknown): time is string => typeof time === 'string',
+    ),
+    sourceName: value.sourceName,
+    sourceUrl: value.sourceUrl,
+    officialWebsiteUrl:
+      typeof value.officialWebsiteUrl === 'string'
+        ? value.officialWebsiteUrl
+        : undefined,
+    sourceLabel: value.sourceLabel,
+    verified: value.verified,
+    coverageNote:
+      typeof value.coverageNote === 'string' ? value.coverageNote : undefined,
+    maghribUsesPublishedOffset:
+      typeof value.maghribUsesPublishedOffset === 'boolean'
+        ? value.maghribUsesPublishedOffset
+        : undefined,
+    fetchedAt: value.fetchedAt,
+  };
+}
+
+export function validSavedPreferences(value: any): Partial<AppPreferences> {
   if (!value || typeof value !== 'object') return {};
+  const savedLanguage = quranLanguageOptions.some(
+    option => option.code === value.quranLanguage,
+  )
+    ? value.quranLanguage
+    : defaultPreferences.quranLanguage;
+  const homeMosque = validSavedMosque(value.homeMosque);
+  const savedSchedule = validSavedPublishedSchedule(
+    value.homeMosqueSchedule?.schedule,
+  );
+  const homeMosqueSchedule =
+    homeMosque &&
+    savedSchedule &&
+    value.homeMosqueSchedule?.mosqueId === homeMosque.id &&
+    typeof value.homeMosqueSchedule?.refreshedOn === 'string'
+      ? {
+          mosqueId: homeMosque.id,
+          refreshedOn: value.homeMosqueSchedule.refreshedOn,
+          schedule: savedSchedule,
+        }
+      : null;
   return {
     locationMode: value.locationMode === 'custom' ? 'custom' : 'device',
     customLocation:
@@ -68,12 +186,16 @@ function validSavedPreferences(value: any): Partial<AppPreferences> {
         ? value.customLocation
         : null,
     prayerTimeSource:
-      value.prayerTimeSource === 'calculated'
-        ? 'calculated'
-        : 'closestMosque',
-    calculationMethod: value.calculationMethod,
-    quranLanguage: value.quranLanguage,
+      value.prayerTimeSource === 'calculated' ? 'calculated' : 'closestMosque',
+    calculationMethod: calculationMethodOptions.some(
+      option => option.key === value.calculationMethod,
+    )
+      ? value.calculationMethod
+      : defaultPreferences.calculationMethod,
+    quranLanguage: savedLanguage,
     quranReading: 'hafs',
+    homeMosque,
+    homeMosqueSchedule,
   };
 }
 
@@ -102,8 +224,9 @@ export function AppPreferencesProvider({
   children: React.ReactNode;
 }) {
   const [preferences, setPreferences] = useState(defaultPreferences);
-  const [deviceLocation, setDeviceLocation] =
-    useState<ResolvedLocation | null>(null);
+  const [deviceLocation, setDeviceLocation] = useState<ResolvedLocation | null>(
+    null,
+  );
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [restored, setRestored] = useState(false);
@@ -162,6 +285,7 @@ export function AppPreferencesProvider({
       deviceLocation,
       locationLoading,
       locationError,
+      preferencesRestored: restored,
       refreshDeviceLocation,
     }),
     [
@@ -171,6 +295,7 @@ export function AppPreferencesProvider({
       locationLoading,
       preferences,
       refreshDeviceLocation,
+      restored,
       updatePreferences,
     ],
   );

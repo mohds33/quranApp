@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -32,47 +31,70 @@ import {
   PublishedMosquePrayerSchedule,
 } from '../services/prayerTimes';
 
-import { isNil } from 'lodash';
-
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
-}
-
 export default function PrayerTimesScreen({ navigation }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { selectedMosque, findingClosestMosque, closestMosqueError } = useSelectedMosque();  
-  const [schedule, setSchedule] =
+  const {
+    selectedMosque,
+    homeMosque,
+    findingClosestMosque,
+    closestMosqueError,
+    homeMosqueSchedule,
+    homeMosqueScheduleLoading,
+    homeMosqueScheduleError,
+    refreshHomeMosqueSchedule,
+  } = useSelectedMosque();
+  const [loadedSchedule, setLoadedSchedule] =
     useState<PublishedMosquePrayerSchedule | null>(null);
+  const [loadedScheduleLoading, setLoadedScheduleLoading] = useState(true);
+  const [loadedScheduleError, setLoadedScheduleError] = useState('');
+  const usesSavedHomeMosque = Boolean(
+    homeMosque && selectedMosque?.id === homeMosque.id,
+  );
+  const schedule = usesSavedHomeMosque ? homeMosqueSchedule : loadedSchedule;
+  const loading = usesSavedHomeMosque
+    ? homeMosqueScheduleLoading
+    : loadedScheduleLoading;
+  const error = usesSavedHomeMosque
+    ? homeMosqueScheduleError
+    : loadedScheduleError;
   const [reminders, setReminders] = useState<string[]>(['Fajr', 'Maghrib']);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
-  const loadPrayerTimes = useCallback(async () => {
-    if (!selectedMosque) {
-      
-      return setError('No mosque selected. Please select a mosque to view prayer times.');
-    } 
-    setLoading(true);
-    setError('');
-    setSchedule(null);
-    try {
-      setSchedule(await fetchPublishedMosquePrayerSchedule(selectedMosque));
-    } catch (failure) {
-      setError(
-        failure instanceof Error
-          ? failure.message
-          : 'No published schedule could be loaded for this masjid.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedMosque]);
+  const loadPrayerTimes = useCallback(
+    async (forceRefresh = false) => {
+      if (!selectedMosque) {
+        setLoadedSchedule(null);
+        setLoadedScheduleLoading(false);
+        setLoadedScheduleError(
+          'No mosque selected. Please select a mosque to view prayer times.',
+        );
+        return;
+      }
+      if (usesSavedHomeMosque) {
+        if (forceRefresh) await refreshHomeMosqueSchedule(true);
+        return;
+      }
+      setLoadedScheduleLoading(true);
+      setLoadedScheduleError('');
+      setLoadedSchedule(null);
+      try {
+        setLoadedSchedule(
+          await fetchPublishedMosquePrayerSchedule(selectedMosque, {
+            forceRefresh,
+          }),
+        );
+      } catch (failure) {
+        setLoadedScheduleError(
+          failure instanceof Error
+            ? failure.message
+            : 'No published schedule could be loaded for this masjid.',
+        );
+      } finally {
+        setLoadedScheduleLoading(false);
+      }
+    },
+    [refreshHomeMosqueSchedule, selectedMosque, usesSavedHomeMosque],
+  );
 
   useEffect(() => {
     loadPrayerTimes();
@@ -90,8 +112,36 @@ export default function PrayerTimesScreen({ navigation }: any) {
     if (sourceUrl) Linking.openURL(sourceUrl);
   };
 
-  if (isNil(selectedMosque)) {
-    return (<Text>No mosque selected.</Text>);
+  if (!selectedMosque) {
+    return (
+      <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
+        <View style={shared.content}>
+          <ScreenTitle title="Prayer times" />
+          <View style={[styles.emptyCard, theme.card]}>
+            <MapPin size={24} color={palette.green} />
+            <Text style={[styles.emptyTitle, theme.text]}>
+              {findingClosestMosque
+                ? 'Finding your masjid…'
+                : 'Choose a masjid'}
+            </Text>
+            <Text style={[styles.emptyText, theme.mutedText]}>
+              {closestMosqueError ||
+                'Set a home masjid to see its published prayer schedule.'}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('Mosques')}
+              style={[styles.chooseButton, { backgroundColor: palette.mint }]}
+            >
+              <Search size={16} color={palette.green} />
+              <Text style={[styles.chooseText, { color: palette.green }]}>
+                Find a masjid
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -100,10 +150,7 @@ export default function PrayerTimesScreen({ navigation }: any) {
         contentContainerStyle={shared.content}
         showsVerticalScrollIndicator={false}
       >
-        <ScreenTitle
-          title="Prayer times"
-          subtitle={`${formatDate(new Date())} · selected masjid`}
-        />
+        <ScreenTitle title="Prayer times" />
 
         <View style={[styles.sourceCard, theme.card]}>
           <View style={[styles.sourceIcon, { backgroundColor: palette.mint }]}>
@@ -135,7 +182,7 @@ export default function PrayerTimesScreen({ navigation }: any) {
             accessibilityRole="button"
             disabled={loading}
             hitSlop={8}
-            onPress={loadPrayerTimes}
+            onPress={() => loadPrayerTimes(true)}
           >
             {loading ? (
               <ActivityIndicator color={palette.green} size="small" />
@@ -210,14 +257,7 @@ export default function PrayerTimesScreen({ navigation }: any) {
                   } ${name} reminder`}
                   accessibilityRole="button"
                   hitSlop={9}
-                  onPress={() => {
-                    const enabled = !reminders.includes(name);
-                    toggleReminder(name);
-                    Alert.alert(
-                      `${name} reminder`,
-                      enabled ? 'Reminder enabled.' : 'Reminder disabled.',
-                    );
-                  }}
+                  onPress={() => toggleReminder(name)}
                 >
                   <Bell
                     size={17}
@@ -232,7 +272,10 @@ export default function PrayerTimesScreen({ navigation }: any) {
               </View>
             ))
           ) : (
-            <Pressable onPress={loadPrayerTimes} style={styles.retry}>
+            <Pressable
+              onPress={() => loadPrayerTimes(true)}
+              style={styles.retry}
+            >
               <Text style={[styles.retryText, { color: palette.green }]}>
                 Check again
               </Text>
@@ -306,6 +349,25 @@ export default function PrayerTimesScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  emptyCard: {
+    ...shared.card,
+    alignItems: 'center',
+    padding: 24,
+  },
+  emptyTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: '800',
+    marginTop: 12,
+  },
+  emptyText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: 7,
+    marginBottom: 18,
+  },
   sourceCard: {
     ...shared.card,
     minHeight: 82,

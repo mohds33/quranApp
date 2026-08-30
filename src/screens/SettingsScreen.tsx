@@ -24,9 +24,14 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
+import { useAppPreferences } from '../components/AppPreferencesContext';
+import { quranLanguageOptions } from '../data/quran';
 
 type SettingKey = 'location' | 'method' | 'translation';
-const options: Record<SettingKey, { title: string; values: string[] }> = {
+const options: Record<
+  Exclude<SettingKey, 'translation'>,
+  { title: string; values: string[] }
+> = {
   location: {
     title: 'Choose location',
     values: ['Calgary, Alberta', 'Edmonton, Alberta', 'Toronto, Ontario'],
@@ -35,19 +40,19 @@ const options: Record<SettingKey, { title: string; values: string[] }> = {
     title: 'Prayer calculation',
     values: ['ISNA', 'Muslim World League', 'Umm al-Qura'],
   },
-  translation: {
-    title: 'Quran translation',
-    values: ['The Clear Quran', 'Sahih International', 'Pickthall'],
-  },
 };
 
 export default function SettingsScreen() {
   const { isDark, setDarkMode, palette } = useAppTheme();
   const theme = useThemeStyles();
+  const { preferences, updatePreferences } = useAppPreferences();
+  const activeLanguage =
+    quranLanguageOptions.find(
+      option => option.code === preferences.quranLanguage,
+    ) ?? quranLanguageOptions[0];
   const [settings, setSettings] = useState({
     location: 'Calgary, Alberta',
     method: 'ISNA',
-    translation: 'The Clear Quran',
   });
   const [notifications, setNotifications] = useState(true);
   const rows = [
@@ -60,13 +65,24 @@ export default function SettingsScreen() {
     { Icon: Globe2, key: 'translation' as const, title: 'Quran translation' },
   ];
   const choose = (key: SettingKey) =>
-    Alert.alert(options[key].title, undefined, [
-      ...options[key].values.map(value => ({
-        text: `${settings[key] === value ? '✓ ' : ''}${value}`,
-        onPress: () => setSettings(current => ({ ...current, [key]: value })),
-      })),
-      { text: 'Cancel', style: 'cancel' as const },
-    ]);
+    key === 'translation'
+      ? Alert.alert('Quran translation', undefined, [
+          ...quranLanguageOptions.map(option => ({
+            text: `${preferences.quranLanguage === option.code ? '✓ ' : ''}${
+              option.label
+            } · ${option.translator}`,
+            onPress: () => updatePreferences({ quranLanguage: option.code }),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ])
+      : Alert.alert(options[key].title, undefined, [
+          ...options[key].values.map(value => ({
+            text: `${settings[key] === value ? '✓ ' : ''}${value}`,
+            onPress: () =>
+              setSettings(current => ({ ...current, [key]: value })),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ]);
 
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
@@ -88,7 +104,9 @@ export default function SettingsScreen() {
               <View style={styles.copy}>
                 <Text style={[styles.title, theme.text]}>{title}</Text>
                 <Text style={[styles.value, theme.mutedText]}>
-                  {settings[key]}
+                  {key === 'translation'
+                    ? `${activeLanguage.label} · ${activeLanguage.translator}`
+                    : settings[key]}
                 </Text>
               </View>
               <ChevronRight size={18} color={palette.muted} />

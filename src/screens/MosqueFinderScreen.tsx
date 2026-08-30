@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Region } from 'react-native-maps';
 import {
   ChevronRight,
+  Check,
   Home,
   LocateFixed,
   MapPin,
@@ -81,7 +82,7 @@ type LoadForOriginOptions = {
 export default function MosqueFinderScreen({ navigation }: any) {
   const { palette, isDark } = useAppTheme();
   const theme = useThemeStyles();
-  const { selectMosque } = useSelectedMosque();
+  const { selectedMosque: homeMosque, selectMosque } = useSelectedMosque();
   const mapRef = useRef<MapView>(null);
   const mapReadyRef = useRef(false);
   const mapOriginRef = useRef<Coordinates>(CALGARY_CENTRE);
@@ -164,7 +165,6 @@ export default function MosqueFinderScreen({ navigation }: any) {
       setMosques(nextMosques);
       const closestMosque = nextMosques[0] ?? null;
       setSelectedMosque(closestMosque);
-      if (closestMosque) selectMosque(closestMosque);
 
       if (options.cacheLabel && nextMosques.length) {
         saveLastMosqueSearch({
@@ -193,7 +193,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
         focusClosestOnly ? nextMosques.slice(0, 1) : nextMosques,
       );
     },
-    [focusMap, selectMosque],
+    [focusMap],
   );
 
   useEffect(() => {
@@ -208,7 +208,6 @@ export default function MosqueFinderScreen({ navigation }: any) {
         mapOriginRef.current = cached.origin;
         setMosques(cached.mosques);
         setSelectedMosque(closestMosque);
-        selectMosque(closestMosque);
         setSearchedLocation(cached.searchedLocation ?? null);
         setQuery(cached.searchedLocation?.label ?? '');
         setShowAllSearchResults(Boolean(cached.searchedLocation));
@@ -217,7 +216,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
         focusMap(cached.origin, cached.mosques.slice(0, 1));
         loadForOrigin(
           cached.origin,
-          `${cached.label} · closest masjid selected`,
+          `${cached.label} · closest masjid previewed`,
           cached.radiusMeters,
           true,
           {
@@ -231,7 +230,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
 
       loadForOrigin(
         CALGARY_CENTRE,
-        'Calgary area · closest masjid selected',
+        'Calgary area · closest masjid previewed',
         30000,
         true,
         { cacheLabel: 'Calgary' },
@@ -243,7 +242,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
       active = false;
       loadRequestRef.current += 1;
     };
-  }, [focusMap, loadForOrigin, selectMosque]);
+  }, [focusMap, loadForOrigin]);
 
   const locateMe = async () => {
     Keyboard.dismiss();
@@ -259,7 +258,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
       setShowAllSearchResults(false);
       await loadForOrigin(
         origin,
-        'Your location · closest masjid selected',
+        'Your location · closest masjid previewed',
         30000,
         true,
         { cacheLabel: 'your last location' },
@@ -363,7 +362,6 @@ export default function MosqueFinderScreen({ navigation }: any) {
       };
       setMosques(namedMosques);
       setSelectedMosque(firstMatch);
-      selectMosque(firstMatch);
       setQuery(firstMatch.name);
       setShowAllSearchResults(true);
       setSearchedLocation(null);
@@ -404,7 +402,6 @@ export default function MosqueFinderScreen({ navigation }: any) {
         setMosques(nextMosques);
         const closestMosque = nextMosques[0] ?? null;
         setSelectedMosque(closestMosque);
-        if (closestMosque) selectMosque(closestMosque);
         if (nextMosques.length) {
           saveLastMosqueSearch({
             origin: mapOrigin,
@@ -436,8 +433,12 @@ export default function MosqueFinderScreen({ navigation }: any) {
 
   const activeMosque = selectedMosque ?? results[0] ?? null;
   const openMosque = (mosque: Mosque) => {
-    selectMosque(mosque);
     navigation.navigate('MosqueDetail', { mosque });
+  };
+  const setHomeMosque = (mosque: Mosque) => {
+    selectMosque(mosque);
+    setSelectedMosque(mosque);
+    setMessage(`${mosque.name} is now your home masjid.`);
   };
 
   return (
@@ -477,7 +478,6 @@ export default function MosqueFinderScreen({ navigation }: any) {
             key={mosque.id}
             onPress={() => {
               setSelectedMosque(mosque);
-              selectMosque(mosque);
             }}
             pinColor={
               selectedMosque?.id === mosque.id ? palette.gold : palette.green
@@ -611,21 +611,27 @@ export default function MosqueFinderScreen({ navigation }: any) {
       ) : null}
 
       {activeMosque ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`View ${activeMosque.name} prayer times`}
-          onPress={() => openMosque(activeMosque)}
-          style={[styles.mosqueCard, theme.card]}
-        >
-          <View style={styles.cardTop}>
+        <View style={[styles.mosqueCard, theme.card]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`View ${activeMosque.name} details`}
+            onPress={() => openMosque(activeMosque)}
+            style={styles.cardTop}
+          >
             <View style={[styles.pinIcon, { backgroundColor: palette.mint }]}>
-              <MapPin size={21} color={palette.green} />
+              {homeMosque?.id === activeMosque.id ? (
+                <Home size={21} color={palette.green} />
+              ) : (
+                <MapPin size={21} color={palette.green} />
+              )}
             </View>
             <View style={styles.cardCopy}>
               <Text style={[styles.cardLabel, { color: palette.gold }]}>
-                {activeMosque.id === results[0]?.id
+                {homeMosque?.id === activeMosque.id
+                  ? 'HOME MASJID'
+                  : activeMosque.id === results[0]?.id
                   ? 'CLOSEST MASJID'
-                  : 'SELECTED MASJID'}
+                  : 'PREVIEWING MASJID'}
               </Text>
               <Text numberOfLines={1} style={[styles.cardName, theme.text]}>
                 {activeMosque.name}
@@ -638,7 +644,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
               </Text>
             </View>
             <ChevronRight size={19} color={palette.muted} />
-          </View>
+          </Pressable>
           <View style={[styles.cardFooter, theme.border]}>
             <View style={styles.distanceRow}>
               <Navigation size={14} color={palette.green} />
@@ -646,11 +652,43 @@ export default function MosqueFinderScreen({ navigation }: any) {
                 {activeMosque.distanceKm.toFixed(1)} km away
               </Text>
             </View>
-            <Text style={[styles.prayerLink, { color: palette.green }]}>
-              Prayer times & directions
-            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                homeMosque?.id === activeMosque.id
+                  ? `${activeMosque.name} is already your home masjid`
+                  : `Set ${activeMosque.name} as home masjid`
+              }
+              disabled={homeMosque?.id === activeMosque.id}
+              onPress={() => setHomeMosque(activeMosque)}
+              style={[
+                styles.homeButton,
+                { backgroundColor: palette.green },
+                homeMosque?.id === activeMosque.id && {
+                  backgroundColor: palette.mint,
+                },
+              ]}
+            >
+              {homeMosque?.id === activeMosque.id ? (
+                <Check size={14} color={palette.green} />
+              ) : (
+                <Home size={14} color={colors.white} />
+              )}
+              <Text
+                style={[
+                  styles.homeButtonText,
+                  homeMosque?.id === activeMosque.id && {
+                    color: palette.green,
+                  },
+                ]}
+              >
+                {homeMosque?.id === activeMosque.id
+                  ? 'Home masjid'
+                  : 'Set home'}
+              </Text>
+            </Pressable>
           </View>
-        </Pressable>
+        </View>
       ) : (
         <View style={[styles.emptyCard, theme.card]}>
           <Text style={[styles.emptyTitle, theme.text]}>
@@ -833,7 +871,15 @@ const styles = StyleSheet.create({
   },
   distanceRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   cardDistance: { color: colors.green, fontSize: 10, fontWeight: '800' },
-  prayerLink: { color: colors.green, fontSize: 9, fontWeight: '700' },
+  homeButton: {
+    minHeight: 34,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  homeButtonText: { color: colors.white, fontSize: 10, fontWeight: '900' },
   emptyCard: {
     ...shared.card,
     position: 'absolute',

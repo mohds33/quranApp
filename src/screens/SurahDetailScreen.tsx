@@ -1,41 +1,57 @@
-import React, { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bookmark, Pause, Play } from 'lucide-react-native';
+import { ArrowLeft, ArrowUp, Bookmark, Play } from 'lucide-react-native';
 import {
   colors,
   shared,
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import {
-  Ayah,
-  getSurahs,
-  quranLanguageOptions,
-} from '../data/quran';
+import { Ayah, getSurahs } from '../data/quran';
 import { useAppPreferences } from '../components/AppPreferencesContext';
+import { getSurahRecitationUrl } from '../services/quranAudio';
 
 export default function SurahDetailScreen({ navigation, route }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
   const { preferences } = useAppPreferences();
   const localizedSurahs = getSurahs(preferences.quranLanguage);
-  const language =
-    quranLanguageOptions.find(
-      option => option.code === preferences.quranLanguage,
-    ) ?? quranLanguageOptions[0];
   const surah =
-    localizedSurahs.find(
-      item => item.number === route.params?.surahNumber,
-    ) ?? localizedSurahs[0];
-  const [playing, setPlaying] = useState(false);
+    localizedSurahs.find(item => item.number === route.params?.surahNumber) ??
+    localizedSurahs[0];
+  const [openingRecitation, setOpeningRecitation] = useState(false);
   const [bookmarks, setBookmarks] = useState<string[]>([]);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const listRef = useRef<FlatList<Ayah>>(null);
   const toggleBookmark = (number: string) =>
     setBookmarks(items =>
       items.includes(number)
         ? items.filter(item => item !== number)
         : [...items, number],
     );
+  const openRecitation = async () => {
+    setOpeningRecitation(true);
+    try {
+      await Linking.openURL(getSurahRecitationUrl(surah.number));
+    } catch {
+      Alert.alert(
+        'Recitation unavailable',
+        'Could not open the Quran audio stream. Check your connection and try again.',
+      );
+    } finally {
+      setOpeningRecitation(false);
+    }
+  };
 
   const renderAyah = ({ item: ayah }: { item: Ayah }) => {
     const saved = bookmarks.includes(ayah.number);
@@ -74,13 +90,19 @@ export default function SurahDetailScreen({ navigation, route }: any) {
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
       <FlatList
+        ref={listRef}
         contentContainerStyle={shared.content}
         data={surah.ayahs}
+        extraData={preferences.quranLanguage}
         initialNumToRender={8}
         keyExtractor={ayah => ayah.number}
         maxToRenderPerBatch={8}
         removeClippedSubviews
         renderItem={renderAyah}
+        onScroll={event =>
+          setShowScrollTop(event.nativeEvent.contentOffset.y > 600)
+        }
+        scrollEventThrottle={100}
         windowSize={7}
         ListHeaderComponent={
           <>
@@ -102,18 +124,17 @@ export default function SurahDetailScreen({ navigation, route }: any) {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={
-                  playing ? 'Pause recitation' : 'Play recitation'
-                }
-                onPress={() => setPlaying(value => !value)}
+                accessibilityLabel={`Open ${surah.name} recitation`}
+                disabled={openingRecitation}
+                onPress={openRecitation}
                 style={[
                   styles.button,
                   theme.card,
-                  playing && styles.buttonActive,
+                  openingRecitation && styles.buttonActive,
                 ]}
               >
-                {playing ? (
-                  <Pause size={19} fill={colors.white} color={colors.white} />
+                {openingRecitation ? (
+                  <ActivityIndicator color={colors.white} size="small" />
                 ) : (
                   <Play size={19} color={palette.green} />
                 )}
@@ -125,19 +146,21 @@ export default function SurahDetailScreen({ navigation, route }: any) {
                   ? 'بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ'
                   : surah.arabicName}
               </Text>
-              {playing ? (
-                <Text style={styles.playing}>RECITATION PLAYING</Text>
-              ) : null}
+              <Text style={styles.playing}>Mishary Alafasy recitation</Text>
             </View>
           </>
         }
-        ListFooterComponent={
-          <Text style={[styles.attribution, theme.mutedText]}>
-            Hafs ‘an ‘Asim · Uthmani Arabic · {language.label} ·{' '}
-            {language.translator}
-          </Text>
-        }
       />
+      {showScrollTop ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Scroll to the top of the surah"
+          onPress={() => listRef.current?.scrollToOffset({ offset: 0 })}
+          style={[styles.scrollTop, { backgroundColor: palette.green }]}
+        >
+          <ArrowUp size={20} color={colors.white} />
+        </Pressable>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -201,10 +224,19 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   english: { color: colors.muted, fontSize: 13, lineHeight: 21 },
-  attribution: {
-    color: colors.muted,
-    fontSize: 9,
-    textAlign: 'center',
-    marginTop: 8,
+  scrollTop: {
+    position: 'absolute',
+    right: 20,
+    bottom: 92,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 5,
   },
 });
