@@ -8,6 +8,7 @@ import quranSpanish from 'quran-json/dist/quran_es.json';
 import quranSwedish from 'quran-json/dist/quran_sv.json';
 import quranTurkish from 'quran-json/dist/quran_tr.json';
 import quranUrdu from 'quran-json/dist/quran_ur.json';
+import quranPersian from './quran_fa.json';
 
 export type Ayah = {
   number: string;
@@ -41,12 +42,23 @@ type QuranChapterJSON = {
   verses: QuranVerseJSON[];
 };
 
+type PersianQuranJSON = {
+  surahs: Array<{
+    ayahs: Array<{ numberInSurah: number; text: string }>;
+  }>;
+};
+
 export const quranLanguageOptions = [
   { code: 'en', label: 'English', translator: 'Saheeh International' },
   { code: 'bn', label: 'Bengali', translator: 'Muhiuddin Khan' },
   { code: 'zh', label: 'Chinese', translator: 'Muhammad Makin' },
   { code: 'es', label: 'Spanish', translator: 'Muhammad Isa García' },
   { code: 'fr', label: 'French', translator: 'Muhammad Hamidullah' },
+  {
+    code: 'fa',
+    label: 'Farsi',
+    translator: 'Mohammad Mahdi Fooladvand',
+  },
   {
     code: 'id',
     label: 'Indonesian',
@@ -77,12 +89,26 @@ export const quranReadingTraditions = [
   { key: 'ibn_dhakwan', label: 'Ibn Dhakwan ‘an Ibn ‘Amir', available: false },
 ] as const;
 
+const persianEdition = (quranEnglish as QuranChapterJSON[]).map(
+  (chapter, chapterIndex) => ({
+    ...chapter,
+    verses: chapter.verses.map((verse, verseIndex) => ({
+      ...verse,
+      translation:
+        (quranPersian as PersianQuranJSON).surahs[chapterIndex]?.ayahs[
+          verseIndex
+        ]?.text ?? verse.translation,
+    })),
+  }),
+);
+
 const quranEditions: Record<QuranLanguageCode, QuranChapterJSON[]> = {
   bn: quranBengali as QuranChapterJSON[],
   zh: quranChinese as QuranChapterJSON[],
   en: quranEnglish as QuranChapterJSON[],
   es: quranSpanish as QuranChapterJSON[],
   fr: quranFrench as QuranChapterJSON[],
+  fa: persianEdition,
   id: quranIndonesian as QuranChapterJSON[],
   ru: quranRussian as QuranChapterJSON[],
   sv: quranSwedish as QuranChapterJSON[],

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -10,8 +10,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  Bell,
+  BookOpenText,
+  CheckCircle2,
+  ChartColumn,
+  Clock3,
   ExternalLink,
+  History,
   MapPin,
   RefreshCw,
   Search,
@@ -30,10 +34,20 @@ import {
   masjidAyeshaPrayerNames,
   PublishedMosquePrayerSchedule,
 } from '../services/prayerTimes';
+import { useAppPreferences } from '../components/AppPreferencesContext';
+import PrayerHistoryChart from '../components/PrayerHistoryChart';
+import {
+  clearPrayerLog,
+  getPrayerLogStatus,
+  PrayerLogStatus,
+  setPrayerLog,
+  TrackedPrayerName,
+} from '../services/prayerTracking';
 
 export default function PrayerTimesScreen({ navigation }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
+  const { preferences, updatePreferences } = useAppPreferences();
   const {
     selectedMosque,
     homeMosque,
@@ -58,7 +72,15 @@ export default function PrayerTimesScreen({ navigation }: any) {
   const error = usesSavedHomeMosque
     ? homeMosqueScheduleError
     : loadedScheduleError;
-  const [reminders, setReminders] = useState<string[]>(['Fajr', 'Maghrib']);
+  const prayerLogsRef = useRef(preferences.prayerLogs);
+  const tapRef = useRef<
+    Partial<
+      Record<
+        TrackedPrayerName,
+        { pressedAt: number; timer: ReturnType<typeof setTimeout> }
+      >
+    >
+  >({});
 
   const loadPrayerTimes = useCallback(
     async (forceRefresh = false) => {
@@ -100,12 +122,53 @@ export default function PrayerTimesScreen({ navigation }: any) {
     loadPrayerTimes();
   }, [loadPrayerTimes]);
 
-  const toggleReminder = (name: string) =>
-    setReminders(items =>
-      items.includes(name)
-        ? items.filter(item => item !== name)
-        : [...items, name],
-    );
+  useEffect(() => {
+    prayerLogsRef.current = preferences.prayerLogs;
+  }, [preferences.prayerLogs]);
+
+  useEffect(
+    () => () => {
+      Object.values(tapRef.current).forEach(value =>
+        clearTimeout(value?.timer),
+      );
+    },
+    [],
+  );
+
+  const savePrayerStatus = useCallback(
+    (name: TrackedPrayerName, status: PrayerLogStatus) => {
+      const next = setPrayerLog(prayerLogsRef.current, name, status);
+      prayerLogsRef.current = next;
+      updatePreferences({ prayerLogs: next });
+    },
+    [updatePreferences],
+  );
+
+  const trackPrayerTap = (name: TrackedPrayerName) => {
+    const now = Date.now();
+    const previous = tapRef.current[name];
+    if (previous && now - previous.pressedAt < 320) {
+      clearTimeout(previous.timer);
+      delete tapRef.current[name];
+      savePrayerStatus(name, 'delayed');
+      return;
+    }
+    if (previous) clearTimeout(previous.timer);
+    const timer = setTimeout(() => {
+      delete tapRef.current[name];
+      savePrayerStatus(name, 'onTime');
+    }, 300);
+    tapRef.current[name] = { pressedAt: now, timer };
+  };
+
+  const removePrayerStatus = (name: TrackedPrayerName) => {
+    const pending = tapRef.current[name];
+    if (pending) clearTimeout(pending.timer);
+    delete tapRef.current[name];
+    const next = clearPrayerLog(prayerLogsRef.current, name);
+    prayerLogsRef.current = next;
+    updatePreferences({ prayerLogs: next });
+  };
 
   const sourceUrl = schedule?.sourceUrl;
   const openSource = () => {
@@ -117,6 +180,24 @@ export default function PrayerTimesScreen({ navigation }: any) {
       <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
         <View style={shared.content}>
           <ScreenTitle title="Prayer times" />
+          <View style={styles.toolRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('PrayerGuide')}
+              style={[styles.toolButton, theme.card]}
+            >
+              <BookOpenText size={18} color={palette.green} />
+              <Text style={[styles.toolText, theme.text]}>How to pray</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('PrayerHistory')}
+              style={[styles.toolButton, theme.card]}
+            >
+              <History size={18} color={palette.gold} />
+              <Text style={[styles.toolText, theme.text]}>History</Text>
+            </Pressable>
+          </View>
           <View style={[styles.emptyCard, theme.card]}>
             <MapPin size={24} color={palette.green} />
             <Text style={[styles.emptyTitle, theme.text]}>
@@ -151,6 +232,27 @@ export default function PrayerTimesScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
       >
         <ScreenTitle title="Prayer times" />
+
+        <View style={styles.toolRow}>
+          <Pressable
+            accessibilityLabel="Open the step-by-step prayer guide"
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('PrayerGuide')}
+            style={[styles.toolButton, theme.card]}
+          >
+            <BookOpenText size={18} color={palette.green} />
+            <Text style={[styles.toolText, theme.text]}>How to pray</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Open prayer tracking history"
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('PrayerHistory')}
+            style={[styles.toolButton, theme.card]}
+          >
+            <History size={18} color={palette.gold} />
+            <Text style={[styles.toolText, theme.text]}>History</Text>
+          </Pressable>
+        </View>
 
         <View style={[styles.sourceCard, theme.card]}>
           <View style={[styles.sourceIcon, { backgroundColor: palette.mint }]}>
@@ -221,7 +323,7 @@ export default function PrayerTimesScreen({ navigation }: any) {
             <Text style={[styles.headerPrayer, theme.mutedText]}>PRAYER</Text>
             <Text style={[styles.headerTime, theme.mutedText]}>ADHAN</Text>
             <Text style={[styles.headerTime, theme.mutedText]}>IQAMAH</Text>
-            <View style={styles.bellSpacer} />
+            <Text style={[styles.headerLog, theme.mutedText]}>LOG</Text>
           </View>
           {loading ? (
             <ActivityIndicator
@@ -230,47 +332,62 @@ export default function PrayerTimesScreen({ navigation }: any) {
               style={styles.loading}
             />
           ) : schedule ? (
-            masjidAyeshaPrayerNames.map(name => (
-              <View key={name} style={[styles.row, theme.border]}>
-                <View style={styles.copy}>
-                  <Text style={[styles.name, theme.text]}>{name}</Text>
+            masjidAyeshaPrayerNames.map(name => {
+              const status = getPrayerLogStatus(preferences.prayerLogs, name);
+              return (
+                <View key={name} style={[styles.row, theme.border]}>
+                  <View style={styles.copy}>
+                    <Text style={[styles.name, theme.text]}>{name}</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.time,
+                      schedule.adhan[name] ? theme.text : theme.mutedText,
+                    ]}
+                  >
+                    {schedule.adhan[name] ?? '—'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.time,
+                      schedule.iqamah[name] ? theme.text : theme.mutedText,
+                    ]}
+                  >
+                    {schedule.iqamah[name] ?? '—'}
+                  </Text>
+                  <Pressable
+                    accessibilityHint="Tap once for on time, twice for delayed, or hold to clear"
+                    accessibilityLabel={`${name} prayer log: ${
+                      status === 'onTime'
+                        ? 'on time'
+                        : status === 'delayed'
+                        ? 'delayed'
+                        : 'not logged'
+                    }`}
+                    accessibilityRole="button"
+                    onLongPress={() => removePrayerStatus(name)}
+                    onPress={() => trackPrayerTap(name)}
+                    style={[
+                      styles.logButton,
+                      { backgroundColor: palette.mint },
+                    ]}
+                  >
+                    {status === 'onTime' ? (
+                      <CheckCircle2 size={17} color={palette.green} />
+                    ) : status === 'delayed' ? (
+                      <Clock3 size={17} color={palette.gold} />
+                    ) : (
+                      <View
+                        style={[
+                          styles.emptyLog,
+                          { borderColor: palette.muted },
+                        ]}
+                      />
+                    )}
+                  </Pressable>
                 </View>
-                <Text
-                  style={[
-                    styles.time,
-                    schedule.adhan[name] ? theme.text : theme.mutedText,
-                  ]}
-                >
-                  {schedule.adhan[name] ?? '—'}
-                </Text>
-                <Text
-                  style={[
-                    styles.time,
-                    schedule.iqamah[name] ? theme.text : theme.mutedText,
-                  ]}
-                >
-                  {schedule.iqamah[name] ?? '—'}
-                </Text>
-                <Pressable
-                  accessibilityLabel={`${
-                    reminders.includes(name) ? 'Disable' : 'Enable'
-                  } ${name} reminder`}
-                  accessibilityRole="button"
-                  hitSlop={9}
-                  onPress={() => toggleReminder(name)}
-                >
-                  <Bell
-                    size={17}
-                    color={
-                      reminders.includes(name) ? palette.gold : palette.muted
-                    }
-                    fill={
-                      reminders.includes(name) ? palette.gold : 'transparent'
-                    }
-                  />
-                </Pressable>
-              </View>
-            ))
+              );
+            })
           ) : (
             <Pressable
               onPress={() => loadPrayerTimes(true)}
@@ -282,6 +399,26 @@ export default function PrayerTimesScreen({ navigation }: any) {
             </Pressable>
           )}
         </View>
+
+        <Pressable
+          accessibilityLabel="Open full prayer tracking history"
+          accessibilityRole="button"
+          onPress={() => navigation.navigate('PrayerHistory')}
+          style={[styles.historyCard, theme.card]}
+        >
+          <View style={styles.historyHeader}>
+            <View>
+              <Text style={[styles.historyTitle, theme.text]}>
+                Prayer tracking
+              </Text>
+              <Text style={[styles.historySubtitle, theme.mutedText]}>
+                Last 7 days
+              </Text>
+            </View>
+            <ChartColumn size={20} color={palette.green} />
+          </View>
+          <PrayerHistoryChart logs={preferences.prayerLogs} />
+        </Pressable>
 
         {schedule?.jummah.length ? (
           <View style={[styles.jummahCard, theme.card]}>
@@ -349,6 +486,16 @@ export default function PrayerTimesScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  toolRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  toolButton: {
+    flex: 1,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  toolText: { fontSize: 11, fontWeight: '800' },
   emptyCard: {
     ...shared.card,
     alignItems: 'center',
@@ -439,6 +586,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.7,
   },
+  headerLog: {
+    color: colors.muted,
+    width: 42,
+    textAlign: 'center',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+  },
   row: {
     minHeight: 66,
     flexDirection: 'row',
@@ -457,7 +612,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  bellSpacer: { width: 17 },
+  logButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyLog: { width: 15, height: 15, borderRadius: 8, borderWidth: 1.5 },
   loading: { marginVertical: 48 },
   retry: { padding: 30, alignItems: 'center' },
   retryText: { color: colors.green, fontWeight: '800' },
@@ -482,6 +644,14 @@ const styles = StyleSheet.create({
   },
   jummahNumber: { fontSize: 10, fontWeight: '900' },
   jummahTime: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  historyCard: { padding: 17, marginTop: 14 },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  historyTitle: { fontSize: 16, fontWeight: '800' },
+  historySubtitle: { fontSize: 10, marginTop: 3 },
   sourceNote: {
     flexDirection: 'row',
     alignItems: 'center',

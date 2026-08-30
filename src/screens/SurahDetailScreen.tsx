@@ -80,7 +80,13 @@ export default function SurahDetailScreen({ navigation, route }: any) {
           </Pressable>
         </View>
         <Text style={[styles.arabic, theme.text]}>{ayah.arabic}</Text>
-        <Text style={[styles.english, theme.mutedText]}>
+        <Text
+          style={[
+            styles.english,
+            theme.mutedText,
+            preferences.quranLanguage === 'fa' && styles.rtlTranslation,
+          ]}
+        >
           {ayah.translation}
         </Text>
       </View>
@@ -224,6 +230,7 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   english: { color: colors.muted, fontSize: 13, lineHeight: 21 },
+  rtlTranslation: { textAlign: 'right', writingDirection: 'rtl' },
   scrollTop: {
     position: 'absolute',
     right: 20,

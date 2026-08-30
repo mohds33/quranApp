@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import CustomTabBar from './CustomTabBar';
 
 import HomeScreen from '../screens/HomeScreen';
-import PrayerTimesScreen from '../screens/PrayerTimesScreen';
+import PrayerStack from './PrayerStack';
 import QuranStack from './QuranStack';
 import HadithStack from './HadithStack';
 import MosqueStack from './MosqueStack';
@@ -17,7 +17,7 @@ export default function MainTabs() {
   return (
     <Tab.Navigator screenOptions={{ headerShown: false }} tabBar={renderTabBar}>
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Prayer" component={PrayerTimesScreen} />
+      <Tab.Screen name="Prayer" component={PrayerStack} />
       <Tab.Screen name="Quran" component={QuranStack} />
       <Tab.Screen name="Hadith" component={HadithStack} />
       <Tab.Screen name="Mosques" component={MosqueStack} />

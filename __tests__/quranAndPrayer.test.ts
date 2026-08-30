@@ -1,4 +1,11 @@
-import { surahs, totalAyahCount } from '../src/data/quran';
+import {
+  getSurahs,
+  quranLanguageOptions,
+  surahs,
+  totalAyahCount,
+} from '../src/data/quran';
+import { hadithCollections } from '../src/data/hadith';
+import { getFullSahihSource } from '../src/services/hadith';
 import {
   getAyahRecitationUrl,
   getSurahRecitationUrl,
@@ -32,6 +39,13 @@ import {
   websiteLocationMatchesSelectedMosque,
   websiteMatchesSelectedMosque,
 } from '../src/services/prayerTimes';
+import {
+  clearPrayerLog,
+  getPrayerHistoryDays,
+  getPrayerLogStatus,
+  setPrayerLog,
+  validPrayerLogs,
+} from '../src/services/prayerTracking';
 
 test('bundles the complete Quran', () => {
   expect(surahs).toHaveLength(114);
@@ -39,6 +53,76 @@ test('bundles the complete Quran', () => {
   expect(surahs[0].ayahs).toHaveLength(7);
   expect(surahs[1].ayahs).toHaveLength(286);
   expect(surahs[113].ayahs).toHaveLength(6);
+});
+
+test('bundles a complete aligned Farsi Quran translation', () => {
+  const farsi = getSurahs('fa');
+
+  expect(quranLanguageOptions.some(option => option.code === 'fa')).toBe(true);
+  expect(farsi).toHaveLength(114);
+  expect(farsi.reduce((total, surah) => total + surah.ayahs.length, 0)).toBe(
+    6236,
+  );
+  expect(farsi[0].ayahs[0].translation).toBe('به نام خداوند رحمتگر مهربان');
+  expect(farsi[1].ayahs).toHaveLength(286);
+});
+
+test('exposes complete readers and tradition-aware Hadith references', () => {
+  const fullReaderIds = [
+    'bukhari',
+    'muslim',
+    'abudawud',
+    'tirmidhi',
+    'nasai',
+    'ibnmajah',
+    'muwatta',
+    'musnadahmad',
+    'darimi',
+    'riyad',
+    'shamail',
+    'bulugh',
+    'adab',
+    'mishkat',
+    'nawawi40',
+    'qudsi40',
+    'shahwaliullah40',
+  ];
+
+  fullReaderIds.forEach(id =>
+    expect(getFullSahihSource(id)?.dataUrl).toContain('/v1.2.0/'),
+  );
+  expect(
+    hadithCollections.filter(collection => collection.tradition === 'Shia'),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: 'alkafi' }),
+      expect.objectContaining({ id: 'manlayahduruh' }),
+      expect.objectContaining({ id: 'tahdhib' }),
+      expect.objectContaining({ id: 'istibsar' }),
+    ]),
+  );
+});
+
+test('records, replaces, clears, and charts explicit prayer logs', () => {
+  const friday = new Date(2026, 7, 28, 12);
+  const saturday = new Date(2026, 7, 29, 12);
+  let logs = setPrayerLog([], 'Fajr', 'onTime', friday);
+  logs = setPrayerLog(logs, 'Fajr', 'delayed', friday);
+  logs = setPrayerLog(logs, 'Dhuhr', 'onTime', saturday);
+
+  expect(logs).toHaveLength(2);
+  expect(getPrayerLogStatus(logs, 'Fajr', friday)).toBe('delayed');
+  expect(getPrayerHistoryDays(logs, saturday, 2)).toMatchObject([
+    { onTime: 0, delayed: 1 },
+    { onTime: 1, delayed: 0 },
+  ]);
+  expect(clearPrayerLog(logs, 'Fajr', friday)).toHaveLength(1);
+  expect(
+    validPrayerLogs([
+      ...logs,
+      { date: 'bad-date', prayer: 'Fajr', status: 'onTime', recordedAt: '' },
+    ]),
+  ).toHaveLength(2);
 });
 
 test('builds Quran recitation CDN urls', () => {

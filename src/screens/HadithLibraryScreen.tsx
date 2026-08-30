@@ -22,14 +22,9 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import { HadithCategory, hadithCollections } from '../data/hadith';
+import { HadithTradition, hadithCollections } from '../data/hadith';
 
-const filters: Array<'All' | HadithCategory> = [
-  'All',
-  'Canonical',
-  'Classics',
-  'Character',
-];
+const filters: Array<'All' | HadithTradition> = ['All', 'Sunni', 'Shia'];
 
 export default function HadithLibraryScreen({ navigation }: any) {
   const { palette } = useAppTheme();
@@ -47,7 +42,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
         [book.title, book.arabicTitle, book.compiler].some(value =>
           value.toLowerCase().includes(search),
         );
-      const matchesFilter = filter === 'All' || book.category === filter;
+      const matchesFilter = filter === 'All' || book.tradition === filter;
       return (
         matchesSearch &&
         matchesFilter &&
@@ -71,7 +66,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
         <View style={styles.header}>
           <ScreenTitle
             title="Hadith"
-            subtitle="The major collections in one library"
+            subtitle="Major collections across Islamic traditions"
           />
           <Pressable
             accessibilityRole="button"
@@ -96,7 +91,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
           <View style={styles.heroCopy}>
             <Text style={styles.heroTitle}>Hadith library</Text>
             <Text style={styles.heroText}>
-              {hadithCollections.length} trusted classical collections
+              {hadithCollections.length} Sunni and Shia collection references
             </Text>
           </View>
           <Text style={styles.heroArabic}>الحديث</Text>
@@ -219,7 +214,9 @@ export default function HadithLibraryScreen({ navigation }: any) {
                   <Text style={[styles.pill, { color: palette.green }]}>
                     {book.sizeLabel}
                   </Text>
-                  <Text style={styles.category}>{book.category}</Text>
+                  <Text style={styles.category}>
+                    {book.tradition} · {book.category}
+                  </Text>
                 </View>
               </Pressable>
             );

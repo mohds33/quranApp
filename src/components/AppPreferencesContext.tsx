@@ -20,6 +20,7 @@ import {
   type PublishedMosquePrayerSchedule,
 } from '../services/prayerTimes';
 import { quranLanguageOptions, type QuranLanguageCode } from '../data/quran';
+import { PrayerLog, validPrayerLogs } from '../services/prayerTracking';
 
 export type LocationMode = 'device' | 'custom';
 export type PrayerTimeSource = 'closestMosque' | 'calculated';
@@ -40,6 +41,7 @@ export type AppPreferences = {
   quranReading: QuranReadingKey;
   homeMosque: Mosque | null;
   homeMosqueSchedule: SavedHomeMosqueSchedule | null;
+  prayerLogs: PrayerLog[];
 };
 
 const defaultPreferences: AppPreferences = {
@@ -51,6 +53,7 @@ const defaultPreferences: AppPreferences = {
   quranReading: 'hafs',
   homeMosque: null,
   homeMosqueSchedule: null,
+  prayerLogs: [],
 };
 
 type AppPreferencesContextValue = {
@@ -196,6 +199,7 @@ export function validSavedPreferences(value: any): Partial<AppPreferences> {
     quranReading: 'hafs',
     homeMosque,
     homeMosqueSchedule,
+    prayerLogs: validPrayerLogs(value.prayerLogs),
   };
 }
 

@@ -1,6 +1,7 @@
 import type { QuranLanguageCode } from './quran';
 
 export type HadithCategory = 'Canonical' | 'Classics' | 'Character';
+export type HadithTradition = 'Sunni' | 'Shia';
 
 export type HadithSample = {
   number: string;
@@ -16,9 +17,12 @@ export type HadithCollection = {
   arabicTitle: string;
   compiler: string;
   category: HadithCategory;
+  tradition: HadithTradition;
   description: string;
   sizeLabel: string;
   samples: HadithSample[];
+  readerUrl?: string;
+  readerSource?: string;
 };
 
 const intention: HadithSample = {
@@ -33,6 +37,7 @@ const intention: HadithSample = {
     zh: '行为取决于意图，每个人将得到他所意图的。',
     es: 'Las obras dependen de las intenciones, y cada persona obtendrá lo que haya pretendido.',
     fr: "Les actes valent par les intentions, et chacun recevra ce qu'il a eu l'intention de faire.",
+    fa: 'ارزش اعمال به نیت‌هاست و هر کس همان را خواهد داشت که نیت کرده است.',
     id: 'Amal dinilai berdasarkan niat, dan setiap orang mendapatkan apa yang ia niatkan.',
     ru: 'Дела оцениваются по намерениям, и каждый получит то, что намеревался.',
     sv: 'Handlingar bedöms efter avsikter, och varje människa får det hon avsåg.',
@@ -52,6 +57,7 @@ const counsel: HadithSample = {
     zh: '宗教是真诚的忠告。',
     es: 'La religión es consejo sincero.',
     fr: 'La religion est le conseil sincère.',
+    fa: 'دین، خیرخواهی صادقانه است.',
     id: 'Agama adalah nasihat yang tulus.',
     ru: 'Религия есть искреннее наставление.',
     sv: 'Religionen är uppriktigt råd.',
@@ -71,6 +77,7 @@ const mercy: HadithSample = {
     zh: '仁慈者会蒙至仁主的怜悯。',
     es: 'El Misericordioso muestra misericordia a los misericordiosos.',
     fr: 'Le Tout Miséricordieux fait miséricorde aux miséricordieux.',
+    fa: 'خداوند رحمان به مهربانان رحمت می‌کند.',
     id: 'Orang-orang penyayang akan dirahmati oleh Yang Maha Penyayang.',
     ru: 'Милостивых помилует Милостивый.',
     sv: 'De barmhärtiga visas barmhärtighet av Den Nåderike.',
@@ -90,6 +97,7 @@ const character: HadithSample = {
     zh: '你们中最好的人，是品德最好的人。',
     es: 'Los mejores entre ustedes son quienes tienen el mejor carácter.',
     fr: "Les meilleurs d'entre vous sont ceux qui ont le meilleur comportement.",
+    fa: 'بهترین شما کسانی هستند که بهترین اخلاق را دارند.',
     id: 'Yang terbaik di antara kalian adalah yang paling baik akhlaknya.',
     ru: 'Лучшие из вас те, кто обладает лучшим нравом.',
     sv: 'De bästa bland er är de med bäst karaktär.',
@@ -106,7 +114,7 @@ export function getHadithSampleTranslation(
   return sample.translations[language] ?? sample.translation;
 }
 
-export const hadithCollections: HadithCollection[] = [
+const sunniHadithCollections: Array<Omit<HadithCollection, 'tradition'>> = [
   {
     id: 'bukhari',
     title: 'Sahih al-Bukhari',
@@ -283,4 +291,147 @@ export const hadithCollections: HadithCollection[] = [
       'A comprehensive thematic anthology drawing from the major hadith collections.',
     samples: [mercy, character],
   },
+  {
+    id: 'qudsi40',
+    title: 'Forty Hadith Qudsi',
+    arabicTitle: 'الأربعون القدسية',
+    compiler: 'Selected sacred narrations',
+    category: 'Character',
+    sizeLabel: '40 hadith',
+    description:
+      'A concise collection of sacred narrations conveying meanings attributed to Allah in Prophetic teaching.',
+    samples: [mercy, counsel],
+  },
+  {
+    id: 'shahwaliullah40',
+    title: 'Forty Hadith of Shah Waliullah',
+    arabicTitle: 'أربعون الشاه ولي الله',
+    compiler: 'Shah Waliullah al-Dihlawi',
+    category: 'Classics',
+    sizeLabel: '40 hadith',
+    description:
+      'Forty narrations selected and transmitted by Shah Waliullah al-Dihlawi.',
+    samples: [intention, character],
+  },
+];
+
+const shiaHadithCollections: HadithCollection[] = [
+  {
+    id: 'alkafi',
+    title: 'Al-Kafi',
+    arabicTitle: 'الكافي',
+    compiler: "Shaykh Muhammad ibn Ya'qub al-Kulayni",
+    category: 'Canonical',
+    tradition: 'Shia',
+    sizeLabel: '8 volumes',
+    description:
+      'A foundational Twelver Shia collection covering belief, ethics, worship, law, and transmitted teachings.',
+    samples: [],
+    readerUrl: 'https://thaqalayn.net/book/1',
+    readerSource: 'Thaqalayn',
+  },
+  {
+    id: 'manlayahduruh',
+    title: 'Man La Yahduruhu al-Faqih',
+    arabicTitle: 'من لا يحضره الفقيه',
+    compiler: 'Shaykh al-Saduq',
+    category: 'Canonical',
+    tradition: 'Shia',
+    sizeLabel: '5 volumes',
+    description:
+      'One of the Four Books of Twelver Shia hadith, organized primarily around practical law and worship.',
+    samples: [],
+    readerUrl: 'https://thaqalayn.net/book/34',
+    readerSource: 'Thaqalayn',
+  },
+  {
+    id: 'tahdhib',
+    title: 'Tahdhib al-Ahkam',
+    arabicTitle: 'تهذيب الأحكام',
+    compiler: 'Shaykh al-Tusi',
+    category: 'Canonical',
+    tradition: 'Shia',
+    sizeLabel: '4 translated volumes',
+    description:
+      'A major hadith-based work of Imami jurisprudence and one of the Four Books.',
+    samples: [],
+    readerUrl: 'https://thaqalayn.net/book/41',
+    readerSource: 'Thaqalayn',
+  },
+  {
+    id: 'istibsar',
+    title: 'Al-Istibsar',
+    arabicTitle: 'الاستبصار',
+    compiler: 'Shaykh al-Tusi',
+    category: 'Canonical',
+    tradition: 'Shia',
+    sizeLabel: '4 volumes',
+    description:
+      'One of the Four Books, focused on apparently differing legal narrations and their reconciliation.',
+    samples: [],
+  },
+  {
+    id: 'nahj',
+    title: 'Nahj al-Balagha',
+    arabicTitle: 'نهج البلاغة',
+    compiler: 'Al-Sharif al-Radi',
+    category: 'Classics',
+    tradition: 'Shia',
+    sizeLabel: 'Sermons, letters, maxims',
+    description:
+      'A celebrated anthology of sermons, letters, and sayings attributed to Imam Ali.',
+    samples: [],
+    readerUrl: 'https://thaqalayn.net/book/32',
+    readerSource: 'Thaqalayn',
+  },
+  {
+    id: 'altawhid',
+    title: 'Al-Tawhid',
+    arabicTitle: 'التوحيد',
+    compiler: 'Shaykh al-Saduq',
+    category: 'Classics',
+    tradition: 'Shia',
+    sizeLabel: 'Theological chapters',
+    description:
+      'Narrations on Divine unity, attributes, worship, and theological questions.',
+    samples: [],
+    readerUrl: 'https://thaqalayn.net/book/14',
+    readerSource: 'Thaqalayn',
+  },
+  {
+    id: 'alkhisal',
+    title: 'Al-Khisal',
+    arabicTitle: 'الخصال',
+    compiler: 'Shaykh al-Saduq',
+    category: 'Classics',
+    tradition: 'Shia',
+    sizeLabel: 'Thematic narrations',
+    description:
+      'A thematic collection arranged around numbered qualities, teachings, and ethical traits.',
+    samples: [],
+    readerUrl: 'https://thaqalayn.net/book/10',
+    readerSource: 'Thaqalayn',
+  },
+  {
+    id: 'amali-mufid',
+    title: 'Al-Amali of al-Mufid',
+    arabicTitle: 'أمالي المفيد',
+    compiler: 'Shaykh al-Mufid',
+    category: 'Classics',
+    tradition: 'Shia',
+    sizeLabel: '42 assemblies',
+    description:
+      'Narrations dictated in scholarly assemblies on conduct, supplication, history, and the Ahl al-Bayt.',
+    samples: [],
+    readerUrl: 'https://thaqalayn.net/book/13',
+    readerSource: 'Thaqalayn',
+  },
+];
+
+export const hadithCollections: HadithCollection[] = [
+  ...sunniHadithCollections.map(collection => ({
+    ...collection,
+    tradition: 'Sunni' as const,
+  })),
+  ...shiaHadithCollections,
 ];
