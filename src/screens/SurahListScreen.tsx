@@ -19,6 +19,7 @@ import {
 import { totalAyahCount } from '../data/quran';
 import { getSurahs, quranLanguageOptions } from '../data/quran';
 import { useAppPreferences } from '../components/AppPreferencesContext';
+import { searchQuranVerses } from '../services/quranReading';
 
 export default function SurahListScreen({ navigation }: any) {
   const { palette } = useAppTheme();
@@ -31,7 +32,39 @@ export default function SurahListScreen({ navigation }: any) {
     ) ?? quranLanguageOptions[0];
   const [query, setQuery] = useState('');
   const [savedOnly, setSavedOnly] = useState(false);
-  const [savedSurahs] = useState(['1', '2']);
+  const bookmarks = preferences.quranBookmarks;
+  const savedSurahs = useMemo(
+    () => new Set(bookmarks.map(bookmark => bookmark.surah)),
+    [bookmarks],
+  );
+  const lastRead = preferences.quranLastRead;
+  const lastReadSurah = lastRead
+    ? localizedSurahs.find(surah => surah.number === lastRead.surah)
+    : undefined;
+  const verseResults = useMemo(
+    () => (savedOnly ? [] : searchQuranVerses(query, localizedSurahs)),
+    [localizedSurahs, query, savedOnly],
+  );
+  const savedVerses = useMemo(
+    () =>
+      bookmarks
+        .map(bookmark => {
+          const surah = localizedSurahs.find(
+            item => item.number === bookmark.surah,
+          );
+          const ayah = surah?.ayahs.find(item => item.number === bookmark.ayah);
+          return surah && ayah
+            ? {
+                ...bookmark,
+                surahName: surah.name,
+                translation: ayah.translation,
+              }
+            : null;
+        })
+        .filter(item => item !== null)
+        .reverse(),
+    [bookmarks, localizedSurahs],
+  );
   const results = useMemo(() => {
     const search = query.trim().toLowerCase();
     return localizedSurahs.filter(surah => {
@@ -40,14 +73,13 @@ export default function SurahListScreen({ navigation }: any) {
         [surah.name, surah.meaning, surah.arabicName, surah.number].some(
           value => value.toLowerCase().includes(search),
         );
-      return (
-        matchesSearch && (!savedOnly || savedSurahs.includes(surah.number))
-      );
+      return matchesSearch && (!savedOnly || savedSurahs.has(surah.number));
     });
   }, [localizedSurahs, query, savedOnly, savedSurahs]);
 
-  const openSurah = (surahNumber: string) =>
-    navigation.navigate('SurahDetail', { surahNumber });
+  const openSurah = (surahNumber: string, ayahNumber?: string) =>
+    navigation.navigate('SurahDetail', { surahNumber, ayahNumber });
+  const verseList = savedOnly ? savedVerses : verseResults;
 
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
@@ -64,7 +96,9 @@ export default function SurahListScreen({ navigation }: any) {
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Show saved surahs"
+            accessibilityLabel={
+              savedOnly ? 'Show all surahs' : 'Show bookmarked verses'
+            }
             onPress={() => setSavedOnly(value => !value)}
             style={[
               styles.bookmark,
@@ -85,7 +119,7 @@ export default function SurahListScreen({ navigation }: any) {
             accessibilityLabel="Search surahs"
             value={query}
             onChangeText={setQuery}
-            placeholder="Search surahs or verses"
+            placeholder="Search surahs, verses or 2:255"
             placeholderTextColor={palette.muted}
             style={[styles.input, theme.text]}
             returnKeyType="search"
@@ -100,50 +134,111 @@ export default function SurahListScreen({ navigation }: any) {
             </Pressable>
           ) : null}
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Continue reading Al-Baqarah verse 255"
-          onPress={() => openSurah('2')}
-          style={styles.resume}
-        >
-          <Text style={styles.resumeLabel}>LAST READ</Text>
-          <Text style={styles.resumeTitle}>Al-Baqarah · Ayah 255</Text>
-          <Text style={styles.resumeMeta}>Continue from Ayatul Kursi</Text>
-        </Pressable>
-        <Text style={[styles.section, theme.mutedText]}>
-          {savedOnly ? 'SAVED SURAHS' : 'SURAH INDEX'}
-        </Text>
-        <View style={[styles.list, theme.card]}>
-          {results.map(surah => (
-            <Pressable
-              key={surah.number}
-              style={[styles.row, theme.border]}
-              onPress={() => openSurah(surah.number)}
-            >
-              <View style={[styles.number, { backgroundColor: palette.mint }]}>
-                <Text style={[styles.numberText, { color: palette.green }]}>
-                  {surah.number}
-                </Text>
-              </View>
-              <View style={styles.copy}>
-                <Text style={[styles.name, theme.text]}>{surah.name}</Text>
-                <Text style={[styles.meta, theme.mutedText]}>
-                  {surah.meaning} · {surah.verseCount} verses ·{' '}
-                  {surah.revelationType}
-                </Text>
-              </View>
-              <Text style={[styles.arabic, theme.text]}>
-                {surah.arabicName}
-              </Text>
-              <ChevronRight size={16} color={palette.muted} />
-            </Pressable>
-          ))}
-          {!results.length ? (
-            <Text style={[styles.empty, theme.mutedText]}>
-              No surahs match “{query}”
+        {!query ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              lastRead && lastReadSurah
+                ? `Continue reading ${lastReadSurah.name} verse ${lastRead.ayah}`
+                : 'Start reading Al-Fatihah'
+            }
+            onPress={() =>
+              lastRead
+                ? openSurah(lastRead.surah, lastRead.ayah)
+                : openSurah('1')
+            }
+            style={styles.resume}
+          >
+            <Text style={styles.resumeLabel}>
+              {lastRead ? 'LAST READ' : 'BEGIN READING'}
             </Text>
-          ) : null}
-        </View>
+            <Text style={styles.resumeTitle}>
+              {lastRead && lastReadSurah
+                ? `${lastReadSurah.name} · Ayah ${lastRead.ayah}`
+                : 'Al-Fatihah · Ayah 1'}
+            </Text>
+            <Text style={styles.resumeMeta}>
+              {lastRead
+                ? 'Continue where you left off'
+                : 'Your place is saved automatically as you read'}
+            </Text>
+          </Pressable>
+        ) : null}
+        {verseList.length || savedOnly ? (
+          <>
+            <Text style={[styles.section, theme.mutedText]}>
+              {savedOnly ? 'BOOKMARKED VERSES' : 'MATCHING VERSES'}
+            </Text>
+            <View style={[styles.list, styles.verseList, theme.card]}>
+              {verseList.map(verse => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${verse.surahName} verse ${verse.ayah}`}
+                  key={`${verse.surah}:${verse.ayah}`}
+                  style={[styles.verseRow, theme.border]}
+                  onPress={() => openSurah(verse.surah, verse.ayah)}
+                >
+                  <Text style={[styles.verseRef, { color: palette.green }]}>
+                    {verse.surahName} · {verse.surah}:{verse.ayah}
+                  </Text>
+                  <Text
+                    numberOfLines={2}
+                    style={[styles.meta, styles.verseText, theme.mutedText]}
+                  >
+                    {verse.translation}
+                  </Text>
+                </Pressable>
+              ))}
+              {!verseList.length ? (
+                <Text style={[styles.empty, theme.mutedText]}>
+                  Tap the bookmark on any verse to save it here.
+                </Text>
+              ) : null}
+            </View>
+          </>
+        ) : null}
+        {results.length || !verseList.length ? (
+          <>
+            <Text style={[styles.section, theme.mutedText]}>
+              {savedOnly ? 'SURAHS WITH BOOKMARKS' : 'SURAH INDEX'}
+            </Text>
+            <View style={[styles.list, theme.card]}>
+              {results.map(surah => (
+                <Pressable
+                  key={surah.number}
+                  style={[styles.row, theme.border]}
+                  onPress={() => openSurah(surah.number)}
+                >
+                  <View
+                    style={[styles.number, { backgroundColor: palette.mint }]}
+                  >
+                    <Text style={[styles.numberText, { color: palette.green }]}>
+                      {surah.number}
+                    </Text>
+                  </View>
+                  <View style={styles.copy}>
+                    <Text style={[styles.name, theme.text]}>{surah.name}</Text>
+                    <Text style={[styles.meta, theme.mutedText]}>
+                      {surah.meaning} · {surah.verseCount} verses ·{' '}
+                      {surah.revelationType}
+                    </Text>
+                  </View>
+                  <Text style={[styles.arabic, theme.text]}>
+                    {surah.arabicName}
+                  </Text>
+                  <ChevronRight size={16} color={palette.muted} />
+                </Pressable>
+              ))}
+              {!results.length ? (
+                <Text style={[styles.empty, theme.mutedText]}>
+                  {query
+                    ? `No surahs match “${query}”`
+                    : 'No bookmarked verses yet.'}
+                </Text>
+              ) : null}
+            </View>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -202,7 +297,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
     gap: 12,
   },
   number: {
@@ -218,5 +312,13 @@ const styles = StyleSheet.create({
   name: { color: colors.ink, fontSize: 15, fontWeight: '700' },
   meta: { color: colors.muted, fontSize: 10, marginTop: 4 },
   arabic: { color: colors.ink, fontSize: 18 },
+  verseList: { marginBottom: 25 },
+  verseRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+  },
+  verseRef: { fontSize: 12, fontWeight: '800' },
+  verseText: { fontSize: 12, lineHeight: 18 },
   empty: { color: colors.muted, textAlign: 'center', padding: 30 },
 });

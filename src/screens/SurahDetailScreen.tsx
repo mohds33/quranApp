@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -8,41 +8,107 @@ import {
   StyleSheet,
   Text,
   View,
+  ViewToken,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, ArrowUp, Bookmark, Play } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  ArrowUp,
+  Bookmark,
+  Play,
+  Volume2,
+} from 'lucide-react-native';
 import {
   colors,
   shared,
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import { Ayah, getSurahs } from '../data/quran';
+import { Ayah, getSurahs, globalAyahNumber } from '../data/quran';
 import { useAppPreferences } from '../components/AppPreferencesContext';
-import { getSurahRecitationUrl } from '../services/quranAudio';
+import {
+  getAyahRecitationUrl,
+  getSurahRecitationUrl,
+} from '../services/quranAudio';
+import { sameAyah, toggleAyahBookmark } from '../services/quranReading';
+
+const LAST_READ_SAVE_DELAY_MS = 1200;
+const viewabilityConfig = { itemVisiblePercentThreshold: 60 };
 
 export default function SurahDetailScreen({ navigation, route }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { preferences } = useAppPreferences();
+  const { preferences, updatePreferences } = useAppPreferences();
   const localizedSurahs = getSurahs(preferences.quranLanguage);
   const surah =
     localizedSurahs.find(item => item.number === route.params?.surahNumber) ??
     localizedSurahs[0];
   const [openingRecitation, setOpeningRecitation] = useState(false);
-  const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const listRef = useRef<FlatList<Ayah>>(null);
-  const toggleBookmark = (number: string) =>
-    setBookmarks(items =>
-      items.includes(number)
-        ? items.filter(item => item !== number)
-        : [...items, number],
+  const targetAyah: string | undefined = route.params?.ayahNumber;
+  const [highlightedAyah, setHighlightedAyah] = useState(targetAyah);
+  const bookmarks = preferences.quranBookmarks;
+  const toggleBookmark = (ayah: string) =>
+    updatePreferences({
+      quranBookmarks: toggleAyahBookmark(bookmarks, {
+        surah: surah.number,
+        ayah,
+      }),
+    });
+
+  // Jump to the requested verse whenever this screen is opened for one.
+  useEffect(() => {
+    setHighlightedAyah(targetAyah);
+    const index = surah.ayahs.findIndex(ayah => ayah.number === targetAyah);
+    if (index < 0) {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      return;
+    }
+    const timer = setTimeout(
+      () => listRef.current?.scrollToIndex({ index, viewPosition: 0.1 }),
+      250,
     );
-  const openRecitation = async () => {
+    return () => clearTimeout(timer);
+  }, [surah, targetAyah]);
+
+  // Remember the verse at the top of the screen, without writing on every scroll.
+  const pendingLastRead = useRef<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const surahNumberRef = useRef(surah.number);
+  surahNumberRef.current = surah.number;
+  const lastReadRef = useRef(preferences.quranLastRead);
+  lastReadRef.current = preferences.quranLastRead;
+  const flushLastRead = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    const ayah = pendingLastRead.current;
+    pendingLastRead.current = null;
+    if (!ayah) return;
+    const next = { surah: surahNumberRef.current, ayah };
+    if (lastReadRef.current && sameAyah(lastReadRef.current, next)) return;
+    updatePreferences({ quranLastRead: next });
+  }, [updatePreferences]);
+  useEffect(() => flushLastRead, [flushLastRead]);
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken<Ayah>[] }) => {
+      const first = viewableItems.find(token => token.isViewable)?.item;
+      if (!first) return;
+      pendingLastRead.current = first.number;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(
+        () => flushLastReadRef.current(),
+        LAST_READ_SAVE_DELAY_MS,
+      );
+    },
+  ).current;
+  const flushLastReadRef = useRef(flushLastRead);
+  flushLastReadRef.current = flushLastRead;
+
+  const openAudio = async (url: string) => {
     setOpeningRecitation(true);
     try {
-      await Linking.openURL(getSurahRecitationUrl(surah.number));
+      await Linking.openURL(url);
     } catch {
       Alert.alert(
         'Recitation unavailable',
@@ -53,31 +119,62 @@ export default function SurahDetailScreen({ navigation, route }: any) {
     }
   };
 
+  const openRecitation = () => openAudio(getSurahRecitationUrl(surah.number));
+
   const renderAyah = ({ item: ayah }: { item: Ayah }) => {
-    const saved = bookmarks.includes(ayah.number);
+    const saved = bookmarks.some(item =>
+      sameAyah(item, { surah: surah.number, ayah: ayah.number }),
+    );
     return (
-      <View style={[styles.ayah, theme.card]}>
+      <View
+        style={[
+          styles.ayah,
+          theme.card,
+          highlightedAyah === ayah.number && {
+            borderColor: palette.gold,
+            ...styles.ayahHighlighted,
+          },
+        ]}
+      >
         <View style={styles.ayahTop}>
           <View style={[styles.number, { backgroundColor: palette.mint }]}>
             <Text style={[styles.numberText, { color: palette.green }]}>
               {ayah.number}
             </Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              saved
-                ? `Remove verse ${ayah.number} bookmark`
-                : `Bookmark verse ${ayah.number}`
-            }
-            onPress={() => toggleBookmark(ayah.number)}
-          >
-            <Bookmark
-              size={19}
-              color={palette.gold}
-              fill={saved ? palette.gold : 'transparent'}
-            />
-          </Pressable>
+          <View style={styles.ayahActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Play verse ${ayah.number}`}
+              disabled={openingRecitation}
+              hitSlop={8}
+              onPress={() =>
+                openAudio(
+                  getAyahRecitationUrl(
+                    globalAyahNumber(surah.number, ayah.number),
+                  ),
+                )
+              }
+            >
+              <Volume2 size={19} color={palette.green} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                saved
+                  ? `Remove verse ${ayah.number} bookmark`
+                  : `Bookmark verse ${ayah.number}`
+              }
+              hitSlop={8}
+              onPress={() => toggleBookmark(ayah.number)}
+            >
+              <Bookmark
+                size={19}
+                color={palette.gold}
+                fill={saved ? palette.gold : 'transparent'}
+              />
+            </Pressable>
+          </View>
         </View>
         <Text style={[styles.arabic, theme.text]}>{ayah.arabic}</Text>
         <Text
@@ -99,12 +196,24 @@ export default function SurahDetailScreen({ navigation, route }: any) {
         ref={listRef}
         contentContainerStyle={shared.content}
         data={surah.ayahs}
-        extraData={preferences.quranLanguage}
+        extraData={[preferences.quranLanguage, bookmarks, highlightedAyah]}
         initialNumToRender={8}
         keyExtractor={ayah => ayah.number}
         maxToRenderPerBatch={8}
         removeClippedSubviews
         renderItem={renderAyah}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        onScrollToIndexFailed={({ index, averageItemLength }) => {
+          listRef.current?.scrollToOffset({
+            offset: index * averageItemLength,
+            animated: false,
+          });
+          setTimeout(
+            () => listRef.current?.scrollToIndex({ index, viewPosition: 0.1 }),
+            120,
+          );
+        }}
         onScroll={event =>
           setShowScrollTop(event.nativeEvent.contentOffset.y > 600)
         }
@@ -211,7 +320,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   ayah: { ...shared.card, padding: 19, marginBottom: 12 },
+  ayahHighlighted: { borderWidth: 1.5 },
   ayahTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  ayahActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   number: {
     minWidth: 30,
     height: 30,

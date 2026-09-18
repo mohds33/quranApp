@@ -34,6 +34,9 @@ import type { DailyPrayerSchedule } from '../services/prayerTimes';
 import { getAyahRecitationUrl } from '../services/quranAudio';
 import { useAppPreferences } from '../components/AppPreferencesContext';
 import { getHadithSampleTranslation, hadithCollections } from '../data/hadith';
+import { getSurahs, globalAyahNumber } from '../data/quran';
+
+const AYATUL_KURSI = { surah: '2', ayah: '255' };
 
 function formatCountdown(target: Date, now: Date) {
   const diffMs = target.getTime() - now.getTime();
@@ -80,17 +83,28 @@ export default function HomeScreen({ navigation }: any) {
     return () => clearInterval(interval);
   }, []);
 
-  const openQuran = (surahNumber = '2') => {
+  const readingTarget = preferences.quranLastRead ?? AYATUL_KURSI;
+  const readingSurah = getSurahs(preferences.quranLanguage).find(
+    surah => surah.number === readingTarget.surah,
+  );
+  const openQuran = () => {
     navigation.navigate('Quran', {
       screen: 'SurahDetail',
-      params: { surahNumber },
+      params: {
+        surahNumber: readingTarget.surah,
+        ayahNumber: readingTarget.ayah,
+      },
     });
   };
 
-  const openAyatulKursiRecitation = async () => {
+  const openReadingRecitation = async () => {
     setOpeningRecitation(true);
     try {
-      await Linking.openURL(getAyahRecitationUrl(262));
+      await Linking.openURL(
+        getAyahRecitationUrl(
+          globalAyahNumber(readingTarget.surah, readingTarget.ayah),
+        ),
+      );
     } catch {
       Alert.alert(
         'Recitation unavailable',
@@ -203,8 +217,8 @@ export default function HomeScreen({ navigation }: any) {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Continue reading Al-Baqarah"
-          onPress={() => openQuran('2')}
+          accessibilityLabel={`Continue reading ${readingSurah?.name} verse ${readingTarget.ayah}`}
+          onPress={openQuran}
           style={[styles.continueCard, theme.card]}
         >
           <View style={[styles.bookIcon, { backgroundColor: palette.mint }]}>
@@ -212,18 +226,19 @@ export default function HomeScreen({ navigation }: any) {
           </View>
           <View style={styles.continueCopy}>
             <Text style={styles.overline}>CONTINUE READING</Text>
-            <Text style={[styles.surah, theme.text]}>Al-Baqarah</Text>
+            <Text style={[styles.surah, theme.text]}>{readingSurah?.name}</Text>
             <Text style={[styles.ayah, theme.mutedText]}>
-              Verse 255 · Ayatul Kursi
+              Verse {readingTarget.ayah}
+              {preferences.quranLastRead ? '' : ' · Ayatul Kursi'}
             </Text>
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open Ayatul Kursi recitation"
+            accessibilityLabel={`Play ${readingSurah?.name} verse ${readingTarget.ayah}`}
             disabled={openingRecitation}
             onPress={event => {
               event.stopPropagation();
-              openAyatulKursiRecitation();
+              openReadingRecitation();
             }}
             style={styles.play}
           >

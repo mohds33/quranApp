@@ -149,3 +149,13 @@ export const totalAyahCount = surahs.reduce(
   (total, surah) => total + surah.ayahs.length,
   0,
 );
+
+const surahStartOffsets = surahs.reduce<number[]>((offsets, surah, index) => {
+  offsets.push(index ? offsets[index - 1] + surahs[index - 1].ayahs.length : 0);
+  return offsets;
+}, []);
+
+/** The 1-based ayah number across the whole mushaf, used by audio CDNs. */
+export function globalAyahNumber(surahNumber: string, ayahNumber: string) {
+  return surahStartOffsets[Number(surahNumber) - 1] + Number(ayahNumber);
+}

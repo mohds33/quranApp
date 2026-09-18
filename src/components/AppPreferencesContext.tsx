@@ -19,7 +19,16 @@ import {
   type CalculationMethodKey,
   type PublishedMosquePrayerSchedule,
 } from '../services/prayerTimes';
-import { quranLanguageOptions, type QuranLanguageCode } from '../data/quran';
+import {
+  quranLanguageOptions,
+  surahs,
+  type QuranLanguageCode,
+} from '../data/quran';
+import {
+  type AyahReference,
+  validAyahBookmarks,
+  validAyahReference,
+} from '../services/quranReading';
 import { PrayerLog, validPrayerLogs } from '../services/prayerTracking';
 
 export type LocationMode = 'device' | 'custom';
@@ -39,6 +48,8 @@ export type AppPreferences = {
   calculationMethod: CalculationMethodKey;
   quranLanguage: QuranLanguageCode;
   quranReading: QuranReadingKey;
+  quranLastRead: AyahReference | null;
+  quranBookmarks: AyahReference[];
   homeMosque: Mosque | null;
   homeMosqueSchedule: SavedHomeMosqueSchedule | null;
   prayerLogs: PrayerLog[];
@@ -51,6 +62,8 @@ const defaultPreferences: AppPreferences = {
   calculationMethod: 'northAmerica',
   quranLanguage: 'en',
   quranReading: 'hafs',
+  quranLastRead: null,
+  quranBookmarks: [],
   homeMosque: null,
   homeMosqueSchedule: null,
   prayerLogs: [],
@@ -197,6 +210,8 @@ export function validSavedPreferences(value: any): Partial<AppPreferences> {
       : defaultPreferences.calculationMethod,
     quranLanguage: savedLanguage,
     quranReading: 'hafs',
+    quranLastRead: validAyahReference(value.quranLastRead, surahs),
+    quranBookmarks: validAyahBookmarks(value.quranBookmarks, surahs),
     homeMosque,
     homeMosqueSchedule,
     prayerLogs: validPrayerLogs(value.prayerLogs),
