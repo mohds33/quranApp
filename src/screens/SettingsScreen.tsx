@@ -169,7 +169,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
   },
   icon: {
     width: 38,

@@ -22,9 +22,14 @@ import {
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import { HadithTradition, hadithCollections } from '../data/hadith';
+import { HadithCategory, hadithCollections } from '../data/hadith';
 
-const filters: Array<'All' | HadithTradition> = ['All', 'Sunni', 'Shia'];
+const filters: Array<'All' | HadithCategory> = [
+  'All',
+  'Canonical',
+  'Classics',
+  'Character',
+];
 
 export default function HadithLibraryScreen({ navigation }: any) {
   const { palette } = useAppTheme();
@@ -42,7 +47,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
         [book.title, book.arabicTitle, book.compiler].some(value =>
           value.toLowerCase().includes(search),
         );
-      const matchesFilter = filter === 'All' || book.tradition === filter;
+      const matchesFilter = filter === 'All' || book.category === filter;
       return (
         matchesSearch &&
         matchesFilter &&
@@ -66,7 +71,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
         <View style={styles.header}>
           <ScreenTitle
             title="Hadith"
-            subtitle="Major collections across Islamic traditions"
+            subtitle="The major Sunni hadith collections"
           />
           <Pressable
             accessibilityRole="button"
@@ -91,7 +96,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
           <View style={styles.heroCopy}>
             <Text style={styles.heroTitle}>Hadith library</Text>
             <Text style={styles.heroText}>
-              {hadithCollections.length} Sunni and Shia collection references
+              {hadithCollections.length} Sunni collections
             </Text>
           </View>
           <Text style={styles.heroArabic}>الحديث</Text>
@@ -214,9 +219,7 @@ export default function HadithLibraryScreen({ navigation }: any) {
                   <Text style={[styles.pill, { color: palette.green }]}>
                     {book.sizeLabel}
                   </Text>
-                  <Text style={styles.category}>
-                    {book.tradition} · {book.category}
-                  </Text>
+                  <Text style={styles.category}>{book.category}</Text>
                 </View>
               </Pressable>
             );
@@ -286,7 +289,6 @@ const styles = StyleSheet.create({
   row: {
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   monogram: {

@@ -67,7 +67,7 @@ test('bundles a complete aligned Farsi Quran translation', () => {
   expect(farsi[1].ayahs).toHaveLength(286);
 });
 
-test('exposes complete readers and tradition-aware Hadith references', () => {
+test('exposes complete readers for the Sunni Hadith collections', () => {
   const fullReaderIds = [
     'bukhari',
     'muslim',
@@ -91,16 +91,16 @@ test('exposes complete readers and tradition-aware Hadith references', () => {
   fullReaderIds.forEach(id =>
     expect(getFullSahihSource(id)?.dataUrl).toContain('/v1.2.0/'),
   );
-  expect(
-    hadithCollections.filter(collection => collection.tradition === 'Shia'),
-  ).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ id: 'alkafi' }),
-      expect.objectContaining({ id: 'manlayahduruh' }),
-      expect.objectContaining({ id: 'tahdhib' }),
-      expect.objectContaining({ id: 'istibsar' }),
-    ]),
+  expect(hadithCollections.map(collection => collection.id)).toEqual(
+    expect.arrayContaining(fullReaderIds),
   );
+  expect(
+    hadithCollections.some(collection =>
+      ['alkafi', 'manlayahduruh', 'tahdhib', 'istibsar', 'nahj'].includes(
+        collection.id,
+      ),
+    ),
+  ).toBe(false);
 });
 
 test('records, replaces, clears, and charts explicit prayer logs', () => {

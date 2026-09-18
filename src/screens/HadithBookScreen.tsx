@@ -173,8 +173,6 @@ export default function HadithBookScreen({ navigation, route }: any) {
         <Text style={styles.coverTitle}>{book.title}</Text>
         <Text style={styles.coverMeta}>
           {book.sizeLabel} · {book.category}
-          {' · '}
-          {book.tradition}
         </Text>
       </View>
       <Text style={[styles.description, theme.mutedText]}>
@@ -271,7 +269,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
             </Text>
             <Text style={[styles.previewText, theme.text]}>
               {book.readerUrl
-                ? `This ${book.tradition} collection is available from ${
+                ? `This collection is available from ${
                     book.readerSource ?? 'its source library'
                   }. Open the source reader for its available volumes, translations, and grading notes.`
                 : book.samples.length

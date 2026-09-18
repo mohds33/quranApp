@@ -414,7 +414,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 18,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
   },
   prayerName: { flex: 1, color: colors.ink, fontSize: 13, fontWeight: '600' },
   prayerTime: {

@@ -601,7 +601,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
   },
   copy: { flex: 1 },
   name: { color: colors.ink, fontSize: 14, fontWeight: '700' },
