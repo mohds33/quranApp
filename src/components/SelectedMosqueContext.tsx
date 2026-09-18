@@ -70,6 +70,7 @@ export function SelectedMosqueProvider({
 }) {
   const {
     activeLocation,
+    locationTimeZone,
     preferences,
     preferencesRestored,
     updatePreferences,
@@ -186,6 +187,7 @@ export function SelectedMosqueProvider({
       try {
         const schedule = await fetchPublishedMosquePrayerSchedule(mosque, {
           forceRefresh,
+          timeZone: locationTimeZone,
         });
         if (homeMosqueIdRef.current !== mosque.id) return null;
         const refreshedMosque = schedule.officialWebsiteUrl
@@ -228,7 +230,7 @@ export function SelectedMosqueProvider({
         }
       }
     },
-    [homeMosque, todayKey, updatePreferences],
+    [homeMosque, locationTimeZone, todayKey, updatePreferences],
   );
 
   useEffect(() => {

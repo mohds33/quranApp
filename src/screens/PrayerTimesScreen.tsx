@@ -47,7 +47,8 @@ import {
 export default function PrayerTimesScreen({ navigation }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { preferences, updatePreferences } = useAppPreferences();
+  const { preferences, updatePreferences, locationTimeZone } =
+    useAppPreferences();
   const {
     selectedMosque,
     homeMosque,
@@ -103,6 +104,7 @@ export default function PrayerTimesScreen({ navigation }: any) {
         setLoadedSchedule(
           await fetchPublishedMosquePrayerSchedule(selectedMosque, {
             forceRefresh,
+            timeZone: locationTimeZone,
           }),
         );
       } catch (failure) {
@@ -115,7 +117,12 @@ export default function PrayerTimesScreen({ navigation }: any) {
         setLoadedScheduleLoading(false);
       }
     },
-    [refreshHomeMosqueSchedule, selectedMosque, usesSavedHomeMosque],
+    [
+      locationTimeZone,
+      refreshHomeMosqueSchedule,
+      selectedMosque,
+      usesSavedHomeMosque,
+    ],
   );
 
   useEffect(() => {

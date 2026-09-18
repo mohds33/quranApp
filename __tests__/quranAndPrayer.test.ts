@@ -949,7 +949,8 @@ test('deduplicates concurrent schedule loads and reuses the short-term cache', a
     expect(first.adhan.Fajr).toBe('05:10 AM');
     expect(duplicate).toEqual(first);
     expect(cached).toEqual(first);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // One load: the website, Mawaqit and Takbeer Time; repeats reuse it.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   } finally {
     globalThis.fetch = originalFetch;
     clearPublishedMosquePrayerScheduleCache();

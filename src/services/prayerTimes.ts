@@ -240,6 +240,9 @@ export function calculateQiblaDirection(origin: Coordinates) {
   return Qibla(new AdhanCoordinates(origin.latitude, origin.longitude));
 }
 
+const WEBSITE_USER_AGENT =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+
 async function fetchWithTimeout(
   url: string,
   timeoutMs: number,
@@ -248,7 +251,15 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    // Many mosque sites sit behind bot protection that rejects bare requests.
+    const headers = new Headers(init.headers);
+    if (!headers.has('User-Agent')) {
+      headers.set('User-Agent', WEBSITE_USER_AGENT);
+    }
+    if (!headers.has('Accept-Language')) {
+      headers.set('Accept-Language', 'en;q=0.9,*;q=0.8');
+    }
+    return await fetch(url, { ...init, headers, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
@@ -523,6 +534,13 @@ const websitePrayerAliasValues: Record<
 > = {
   Fajr: [
     'Fajr',
+    'Fadjr',
+    'Fadschr',
+    'Fadjer',
+    'Fayr',
+    'Zora',
+    'Sabah namazi',
+    'Asuba',
     'Fajer',
     'Fajir',
     'Fedzr',
@@ -554,6 +572,13 @@ const websitePrayerAliasValues: Record<
   ],
   Dhuhr: [
     'Dhuhr',
+    'Dohr',
+    'Dhohor',
+    'Dhouhr',
+    'Dhoehr',
+    'Dhuhur',
+    'Zuhor',
+    'Azahar',
     'Duhur',
     'Duhr',
     'Zuhr',
@@ -591,6 +616,8 @@ const websitePrayerAliasValues: Record<
   ],
   Asr: [
     'Asr',
+    'Assr',
+    'Laasar',
     'Asar',
     'Ashar',
     'Casar',
@@ -611,6 +638,9 @@ const websitePrayerAliasValues: Record<
   ],
   Maghrib: [
     'Maghrib',
+    'Magreb',
+    'Maghribi',
+    'Magariba',
     'Maghreb',
     'Magrib',
     'Maqrib',
@@ -632,6 +662,10 @@ const websitePrayerAliasValues: Record<
   ],
   Isha: [
     'Isha',
+    'Isja',
+    'Ischaa',
+    'Ichaa',
+    'عشا',
     'Ishaa',
     'Esha',
     'Eshaa',
@@ -759,7 +793,13 @@ function normalizeWebsiteTime(value: string, prayer?: MasjidAyeshaPrayerName) {
     return `${String(hour).padStart(2, '0')}:${match[2]} ${explicitSuffix}M`;
   }
   if (hour <= 12 && prayer) {
-    const suffix = prayer === 'Fajr' ? 'AM' : 'PM';
+    // Without AM/PM: Fajr is morning; Dhuhr is late morning (10-11) or
+    // afternoon; Isha written as 12:xx has passed midnight.
+    const morning =
+      prayer === 'Fajr' ||
+      (prayer === 'Dhuhr' && hour >= 10 && hour < 12) ||
+      (prayer === 'Isha' && hour === 12);
+    const suffix = morning ? 'AM' : 'PM';
     hour = hour % 12;
     return `${String(hour || 12).padStart(2, '0')}:${match[2]} ${suffix}`;
   }
@@ -1607,16 +1647,484 @@ export function extractPrayerScheduleLinks(html: string, sourceUrl: string) {
   return links.slice(0, 6);
 }
 
+// Month names as they appear in published timetables, normalized the same way
+// as website text (accents and Arabic diacritics removed, lower case).
+const timetableMonthNames: string[][] = [
+  [
+    'january',
+    'jan',
+    'janvier',
+    'janv',
+    'januar',
+    'enero',
+    'ene',
+    'gennaio',
+    'januari',
+    'ocak',
+    'janeiro',
+    'janar',
+    'يناير',
+    'كانون الثاني',
+    'ژانویه',
+    'جنوری',
+    'январь',
+    'января',
+  ],
+  [
+    'february',
+    'feb',
+    'fevrier',
+    'fevr',
+    'fev',
+    'februar',
+    'febrero',
+    'febbraio',
+    'februari',
+    'subat',
+    'fevereiro',
+    'shkurt',
+    'فبراير',
+    'شباط',
+    'فوریه',
+    'فروری',
+    'февраль',
+    'февраля',
+  ],
+  [
+    'march',
+    'mar',
+    'mars',
+    'marz',
+    'marzo',
+    'maart',
+    'maret',
+    'mart',
+    'marco',
+    'مارس',
+    'آذار',
+    'مارچ',
+    'март',
+    'марта',
+  ],
+  [
+    'april',
+    'apr',
+    'avril',
+    'avr',
+    'abril',
+    'aprile',
+    'nisan',
+    'prill',
+    'أبريل',
+    'ابريل',
+    'نيسان',
+    'آوریل',
+    'اپریل',
+    'апрель',
+    'апреля',
+  ],
+  [
+    'may',
+    'mai',
+    'mayo',
+    'maggio',
+    'mei',
+    'mayis',
+    'maio',
+    'maj',
+    'مايو',
+    'أيار',
+    'مه',
+    'مئی',
+    'май',
+    'мая',
+  ],
+  [
+    'june',
+    'jun',
+    'juin',
+    'juni',
+    'junio',
+    'giugno',
+    'haziran',
+    'junho',
+    'qershor',
+    'يونيو',
+    'حزيران',
+    'ژوئن',
+    'جون',
+    'июнь',
+    'июня',
+  ],
+  [
+    'july',
+    'jul',
+    'juillet',
+    'juil',
+    'juli',
+    'julio',
+    'luglio',
+    'temmuz',
+    'julho',
+    'korrik',
+    'يوليو',
+    'تموز',
+    'ژوئیه',
+    'جولائی',
+    'июль',
+    'июля',
+  ],
+  [
+    'august',
+    'aug',
+    'aout',
+    'agosto',
+    'agustus',
+    'augustus',
+    'agustos',
+    'gusht',
+    'أغسطس',
+    'اغسطس',
+    'آب',
+    'اوت',
+    'اگست',
+    'август',
+    'августа',
+  ],
+  [
+    'september',
+    'sep',
+    'sept',
+    'septembre',
+    'septiembre',
+    'settembre',
+    'eylul',
+    'setembro',
+    'shtator',
+    'سبتمبر',
+    'أيلول',
+    'سپتامبر',
+    'ستمبر',
+    'сентябрь',
+    'сентября',
+  ],
+  [
+    'october',
+    'oct',
+    'octobre',
+    'oktober',
+    'okt',
+    'octubre',
+    'ottobre',
+    'ekim',
+    'outubro',
+    'tetor',
+    'أكتوبر',
+    'اكتوبر',
+    'تشرين الأول',
+    'اکتبر',
+    'اکتوبر',
+    'октябрь',
+    'октября',
+  ],
+  [
+    'november',
+    'nov',
+    'novembre',
+    'noviembre',
+    'kasim',
+    'novembro',
+    'nentor',
+    'نوفمبر',
+    'تشرين الثاني',
+    'نوامبر',
+    'نومبر',
+    'ноябрь',
+    'ноября',
+  ],
+  [
+    'december',
+    'dec',
+    'decembre',
+    'dezember',
+    'dez',
+    'diciembre',
+    'dic',
+    'dicembre',
+    'desember',
+    'aralik',
+    'dezembro',
+    'dhjetor',
+    'ديسمبر',
+    'كانون الأول',
+    'دسامبر',
+    'دسمبر',
+    'декабрь',
+    'декабря',
+  ],
+].map(names =>
+  names.map(name => normalizeLocalizedWebsiteText(name).toLocaleLowerCase()),
+);
+
+function timetableMonthIndex(word: string) {
+  const normalized = word.replace(/\.$/, '');
+  return timetableMonthNames.findIndex(names => names.includes(normalized));
+}
+
+type TimetableDateOrder = 'dm' | 'md' | 'unknown';
+
+/** Reads a date written in a timetable cell. Returns [month (1-12), day, year?]. */
+function timetableCellDate(
+  text: string,
+  order: TimetableDateOrder,
+): Array<[number, number, number | undefined]> {
+  const value = normalizeLocalizedWebsiteText(text).toLocaleLowerCase();
+  const results: Array<[number, number, number | undefined]> = [];
+  const year = (raw?: string) =>
+    raw ? (raw.length === 2 ? 2000 + Number(raw) : Number(raw)) : undefined;
+  const iso = value.match(/\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (iso) return [[Number(iso[2]), Number(iso[3]), Number(iso[1])]];
+  const numeric = value.match(/\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b/);
+  if (numeric) {
+    const first = Number(numeric[1]);
+    const second = Number(numeric[2]);
+    if (order !== 'md') results.push([second, first, year(numeric[3])]);
+    if (order !== 'dm') results.push([first, second, year(numeric[3])]);
+    return results;
+  }
+  const words = value.match(/[\p{L}]+\.?/gu) ?? [];
+  const day = value.match(/\b(\d{1,2})(?:st|nd|rd|th|er|e|\.)?\b/)?.[1];
+  const yearMatch = value.match(/\b(\d{4})\b/)?.[1];
+  // Two-word Arabic month names such as "كانون الثاني" are joined first.
+  for (let index = 0; index < words.length; index += 1) {
+    for (const candidate of [
+      `${words[index]} ${words[index + 1] ?? ''}`.trim(),
+      words[index],
+    ]) {
+      const month = timetableMonthIndex(candidate);
+      if (month >= 0 && day) {
+        return [[month + 1, Number(day), year(yearMatch)]];
+      }
+    }
+  }
+  return results;
+}
+
+function timetableDateOrder(dateCells: string[]): TimetableDateOrder {
+  for (const cell of dateCells) {
+    const numeric = normalizeLocalizedWebsiteText(cell).match(
+      /\b(\d{1,2})[/.-](\d{1,2})(?:[/.-]\d{2,4})?\b/,
+    );
+    if (!numeric) continue;
+    if (Number(numeric[1]) > 12) return 'dm';
+    if (Number(numeric[2]) > 12) return 'md';
+  }
+  return 'unknown';
+}
+
+const timetableIqamahWords =
+  /iqa+ma|ikamet|ikama|jama+t|jama+h|jamaah|jamat|congregation|jemaah|jamaa|اقامة|إقامة|اقامه|جماعت|জামাত|икамат|prayer\s*time|salah|salat/i;
+const timetableAdhanWords =
+  /begin|start|adhan|athan|azan|ezan|debut|beginn|inicio|awal|entry|اذان|أذان|آذان|اول|azaan|mithl|shafi|hanafi/i;
+
+type TimetableColumn = {
+  prayer?: MasjidAyeshaPrayerName;
+  imsak?: boolean;
+  kind?: 'adhan' | 'iqamah';
+};
+
+function timetableHeaderPrayer(text: string) {
+  const value = normalizeLocalizedWebsiteText(text).toLocaleLowerCase();
+  for (const name of masjidAyeshaPrayerNames) {
+    if (new RegExp(`(?:${websitePrayerAliases[name]})`, 'i').test(value)) {
+      return name;
+    }
+  }
+  return undefined;
+}
+
+/** Table rows as text cells, with colspan and rowspan expanded into a grid. */
+function timetableRows(tableHTML: string) {
+  const carried: Array<{ text: string; rows: number } | undefined> = [];
+  return [...tableHTML.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(row => {
+    const cells: string[] = [];
+    const takeCarried = () => {
+      while (carried[cells.length]?.rows) {
+        const cell = carried[cells.length]!;
+        cell.rows -= 1;
+        cells.push(cell.text);
+      }
+    };
+    for (const cell of row[1].matchAll(
+      /<(td|th)\b([^>]*)>([\s\S]*?)<\/\1>/gi,
+    )) {
+      takeCarried();
+      const span = (name: string) =>
+        Math.min(
+          8,
+          Math.max(
+            1,
+            Number(
+              cell[2].match(
+                new RegExp(`${name}\\s*=\\s*["']?(\\d+)`, 'i'),
+              )?.[1],
+            ) || 1,
+          ),
+        );
+      const text = websiteHtmlToText(cell[3]).replace(/\s+/g, ' ').trim();
+      const rowSpan = span('rowspan');
+      for (let index = 0; index < span('colspan'); index += 1) {
+        if (rowSpan > 1) carried[cells.length] = { text, rows: rowSpan - 1 };
+        cells.push(text);
+      }
+    }
+    takeCarried();
+    return cells;
+  });
+}
+
+/**
+ * Reads today's row from a daily, monthly or yearly timetable table: columns
+ * named after prayers (in any supported language), optionally split into
+ * start and jama'ah/iqamah times, and rows labelled with a date.
+ */
+export function parseTimetableTablesForDate(
+  html: string,
+  date = new Date(),
+): Pick<PublishedMosquePrayerSchedule, 'adhan' | 'iqamah'> | null {
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const year = date.getFullYear();
+  const pageText = normalizeLocalizedWebsiteText(
+    html.replace(/<[^>]+>/g, ' '),
+  ).toLocaleLowerCase();
+  const pageMentionsMonth = timetableMonthNames[month - 1].some(
+    name => name.length > 3 && pageText.includes(name),
+  );
+  let best: Pick<PublishedMosquePrayerSchedule, 'adhan' | 'iqamah'> | null =
+    null;
+  let bestCount = 0;
+
+  for (const table of html.matchAll(/<table\b[\s\S]*?<\/table>/gi)) {
+    const rows = timetableRows(table[0]);
+    const isTimeRow = (cells: string[]) =>
+      cells.filter(cell => /^\D{0,6}\d{1,2}[:.]\d{2}/.test(cell)).length >= 3;
+    const firstDataRow = rows.findIndex(isTimeRow);
+    if (firstDataRow < 1) continue;
+
+    const columns: TimetableColumn[] = [];
+    for (const header of rows.slice(
+      Math.max(0, firstDataRow - 3),
+      firstDataRow,
+    )) {
+      header.forEach((cell, index) => {
+        const column = (columns[index] ??= {});
+        const prayer = timetableHeaderPrayer(cell);
+        if (prayer) column.prayer = prayer;
+        else if (/imsak|imsaak|امساک|امساك/i.test(cell)) column.imsak = true;
+        if (
+          /sunrise|shuruq|shurooq|chourouk|gunes|terbit|sonnenaufgang|شروق/i.test(
+            cell,
+          )
+        ) {
+          column.prayer = undefined;
+          column.imsak = false;
+        }
+        if (timetableIqamahWords.test(cell.replace(/['’`]/g, ''))) {
+          column.kind = 'iqamah';
+        } else if (!column.kind && timetableAdhanWords.test(cell)) {
+          column.kind = 'adhan';
+        }
+      });
+    }
+    // Turkish and Indonesian tables label Fajr as Imsak when there is no Subuh column.
+    if (!columns.some(column => column.prayer === 'Fajr')) {
+      const imsak = columns.find(column => column.imsak);
+      if (imsak) imsak.prayer = 'Fajr';
+    }
+    if (
+      new Set(columns.map(column => column.prayer).filter(Boolean)).size < 3
+    ) {
+      continue;
+    }
+
+    const dataRows = rows.slice(firstDataRow).filter(isTimeRow);
+    const order = timetableDateOrder(
+      dataRows.map(cells => cells.slice(0, 3).join(' ')),
+    );
+    const dayOnlyTable =
+      pageMentionsMonth && dataRows.length >= 28 && dataRows.length <= 31;
+    const matching = dataRows.filter(cells => {
+      const label = cells.slice(0, 3).join(' ');
+      const dates = timetableCellDate(label, order);
+      if (dates.length) {
+        return dates.some(
+          ([cellMonth, cellDay, cellYear]) =>
+            cellMonth === month &&
+            cellDay === day &&
+            (cellYear === undefined || cellYear === year),
+        );
+      }
+      return (
+        dayOnlyTable &&
+        new RegExp(`(?:^|\\D)${day}(?:\\D|$)`).test(cells[0]) &&
+        /^\D{0,12}\d{1,2}\D{0,12}$/.test(cells[0])
+      );
+    });
+    const todayRow =
+      matching.length === 1
+        ? matching[0]
+        : dataRows.length === 1 && firstDataRow > 0
+        ? dataRows[0]
+        : undefined;
+    if (!todayRow) continue;
+
+    const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
+    const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
+    const unlabeled: Partial<Record<MasjidAyeshaPrayerName, string[]>> = {};
+    todayRow.forEach((cell, index) => {
+      const column = columns[index];
+      if (!column?.prayer) return;
+      const time = cell.match(websiteTimePattern)?.[0];
+      const value = time ? normalizeWebsiteTime(time, column.prayer) : '';
+      if (!value) return;
+      if (column.kind === 'iqamah') iqamah[column.prayer] ??= value;
+      else if (column.kind === 'adhan') adhan[column.prayer] ??= value;
+      else (unlabeled[column.prayer] ??= []).push(value);
+    });
+    for (const name of masjidAyeshaPrayerNames) {
+      const values = unlabeled[name] ?? [];
+      if (!adhan[name] && values.length) adhan[name] = values.shift();
+      if (!iqamah[name] && values.length) iqamah[name] = values.shift();
+    }
+    const count = masjidAyeshaPrayerNames.filter(
+      name => adhan[name] || iqamah[name],
+    ).length;
+    if (count > bestCount) {
+      best = { adhan, iqamah };
+      bestCount = count;
+    }
+  }
+  return bestCount >= 3 ? best : null;
+}
+
 export function parsePublishedMosqueWebsiteHTML(
   html: string,
   mosque: Mosque,
 ): PublishedMosquePrayerSchedule {
   const text = websiteHtmlToText(html);
-  const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
-  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
+  const table = parseTimetableTablesForDate(html);
+  const adhan: PublishedMosquePrayerSchedule['adhan'] = { ...table?.adhan };
+  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {
+    ...table?.iqamah,
+  };
   let publishedPrayerCount = 0;
 
   for (const name of masjidAyeshaPrayerNames) {
+    if (table && (adhan[name] || iqamah[name])) {
+      publishedPrayerCount += 1;
+      continue;
+    }
     const semanticAdhan = semanticWebsiteTime(html, name, 'adhan');
     const semanticIqamah = semanticWebsiteTime(html, name, 'iqamah');
     if (semanticAdhan) adhan[name] = semanticAdhan;
@@ -1649,34 +2157,60 @@ export function parsePublishedMosqueWebsiteHTML(
   };
 }
 
+/**
+ * Finds today's slide in an Athan+ (Masjidal) widget. Current widgets mark it
+ * as the active carousel item; older ones used numbered table_div_N sections.
+ */
+function athanPlusTodaySection(html: string) {
+  const sectionBetween = (start: number, pattern: RegExp) => {
+    const rest = html.slice(start + 1);
+    const next = rest.search(pattern);
+    return html.slice(start, next < 0 ? html.length : start + 1 + next);
+  };
+  const legacyId = html.match(
+    /<div\b[^>]*class\s*=\s*["'][^"']*carousel-item[^"']*\bactive\b[^"']*["'][^>]*data-id\s*=\s*["'](\d+)["']/i,
+  )?.[1];
+  const legacyStart = html.search(
+    new RegExp(
+      `<div\\b[^>]*\\bid\\s*=\\s*["']table_div_${legacyId ?? '0'}["'][^>]*>`,
+      'i',
+    ),
+  );
+  if (legacyStart >= 0) {
+    return sectionBetween(
+      legacyStart,
+      /<div\b[^>]*\bid\s*=\s*["']table_div_\d+["'][^>]*>/i,
+    );
+  }
+  const slidePattern = /<div\b[^>]*class\s*=\s*["'][^"']*\bcarousel-item\b/gi;
+  const slides = [...html.matchAll(slidePattern)].map(match =>
+    sectionBetween(
+      match.index ?? 0,
+      /<div\b[^>]*class\s*=\s*["'][^"']*\bcarousel-item\b/i,
+    ),
+  );
+  const today = new Date();
+  const todayLabel = new RegExp(
+    `\\b${today.toLocaleDateString('en-US', {
+      month: 'short',
+    })}\\w*\\.?\\s+${today.getDate()}\\b`,
+    'i',
+  );
+  const section =
+    slides.find(slide => todayLabel.test(websiteHtmlToText(slide))) ??
+    slides.find(slide => /^<div\b[^>]*\bactive\b/i.test(slide));
+  if (!section) {
+    throw new Error('The Athan+ timetable for today was not found.');
+  }
+  return section;
+}
+
 export function parseAthanPlusPrayerScheduleHTML(
   html: string,
   mosque: Mosque,
   sourceUrl: string,
 ): PublishedMosquePrayerSchedule {
-  const activeTableId =
-    html.match(
-      /<div\b[^>]*class\s*=\s*["'][^"']*carousel-item[^"']*\bactive\b[^"']*["'][^>]*data-id\s*=\s*["'](\d+)["']/i,
-    )?.[1] ?? '0';
-  const tableStartPattern = new RegExp(
-    `<div\\b[^>]*\\bid\\s*=\\s*["']table_div_${activeTableId}["'][^>]*>`,
-    'i',
-  );
-  const tableStart = tableStartPattern.exec(html);
-  if (!tableStart || tableStart.index === undefined) {
-    throw new Error('The Athan+ timetable for today was not found.');
-  }
-  const sectionStart = tableStart.index;
-  const remaining = html.slice(sectionStart + tableStart[0].length);
-  const nextTableIndex = remaining.search(
-    /<div\b[^>]*\bid\s*=\s*["']table_div_\d+["'][^>]*>/i,
-  );
-  const section = html.slice(
-    sectionStart,
-    nextTableIndex < 0
-      ? html.length
-      : sectionStart + tableStart[0].length + nextTableIndex,
-  );
+  const section = athanPlusTodaySection(html);
   const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
   const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
   const rows = [...section.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
@@ -2490,10 +3024,24 @@ async function fetchOfficialMosqueWebsiteSchedule(
   if (!sourceUrl)
     throw new Error('This masjid has no official website listed.');
   const response = await fetchWithTimeout(sourceUrl, 6500);
-  if (!response.ok)
+  let html: string;
+  let resolvedSourceUrl = response.url || sourceUrl;
+  if (response.ok) {
+    html = await response.text();
+  } else if (
+    // Bot protection answers plain requests with a challenge page; a real
+    // web view can usually pass it.
+    [403, 429, 503].includes(response.status) &&
+    Platform.OS === 'ios' &&
+    NativeAppleMapsSearch
+  ) {
+    resolvedSourceUrl = sourceUrl.replace(/^http:/i, 'https:');
+    html = await NativeAppleMapsSearch.extractRenderedWebsiteHTML(
+      resolvedSourceUrl,
+    );
+  } else {
     throw new Error('The official website could not be reached.');
-  const html = await response.text();
-  const resolvedSourceUrl = response.url || sourceUrl;
+  }
   const knownMasjidAyeshaSource = /(?:^|\.)masjidayesha\.ca$/i.test(
     new URL(resolvedSourceUrl).hostname,
   );
@@ -2870,6 +3418,85 @@ async function websitesLinkedFromSocialPages(mosque: Mosque) {
   );
 }
 
+/**
+ * Official websites recorded for the mosque in open data: OpenStreetMap tags
+ * (via Nominatim), the Wikidata "official website" of a tagged item, and the
+ * site the mosque lists on Mawaqit. These beat web search, which is often
+ * blocked or confused by short names.
+ */
+async function websitesFromOpenData(mosque: Mosque) {
+  const openStreetMap = (async () => {
+    const span = 0.02;
+    const viewbox = [
+      mosque.longitude - span,
+      mosque.latitude + span,
+      mosque.longitude + span,
+      mosque.latitude - span,
+    ].join(',');
+    const response = await fetchWithTimeout(
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&extratags=1&bounded=1&limit=3&viewbox=${viewbox}&q=${encodeURIComponent(
+        mosque.name,
+      )}`,
+      6000,
+      {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Sakinah/1.0 (prayer times app)',
+        },
+      },
+    );
+    if (!response.ok) return [];
+    const places: any[] = await response.json();
+    const websites: string[] = [];
+    const wikidataIds: string[] = [];
+    for (const place of Array.isArray(places) ? places : []) {
+      const tags = place?.extratags ?? {};
+      for (const key of [
+        'website',
+        'contact:website',
+        'url',
+        'contact:facebook',
+        'facebook',
+      ]) {
+        if (typeof tags[key] === 'string') websites.push(tags[key]);
+      }
+      if (/^Q\d+$/.test(tags.wikidata ?? '')) wikidataIds.push(tags.wikidata);
+    }
+    const wikidataWebsites = await Promise.allSettled(
+      wikidataIds.slice(0, 2).map(async id => {
+        const entity = await fetchWithTimeout(
+          `https://www.wikidata.org/wiki/Special:EntityData/${id}.json`,
+          6000,
+          { headers: { Accept: 'application/json' } },
+        );
+        if (!entity.ok) return [];
+        const payload = await entity.json();
+        const claims = payload?.entities?.[id]?.claims?.P856 ?? [];
+        return claims
+          .map((claim: any) => claim?.mainsnak?.datavalue?.value)
+          .filter(
+            (value: unknown): value is string => typeof value === 'string',
+          );
+      }),
+    );
+    return [
+      ...websites,
+      ...wikidataWebsites.flatMap(result =>
+        result.status === 'fulfilled' ? result.value : [],
+      ),
+    ];
+  })();
+  const mawaqit = fetchMawaqitNearbyCandidates(mosque).then(matches =>
+    matches
+      .map(match => match.candidate.site)
+      .filter((site): site is string => typeof site === 'string' && !!site),
+  );
+  const results = await Promise.allSettled([openStreetMap, mawaqit]);
+  return results.flatMap(result =>
+    result.status === 'fulfilled' ? result.value : [],
+  );
+}
+
 export async function findOfficialMosqueWebsite(mosque: Mosque) {
   const cacheKey = mosqueWebsiteCacheKey(mosque);
   const cached = discoveredMosqueWebsiteCache.get(cacheKey);
@@ -2890,6 +3517,7 @@ export async function findOfficialMosqueWebsite(mosque: Mosque) {
     );
     const discoveryRequest = (async () => {
       const discoveries = await Promise.allSettled([
+        websitesFromOpenData(mosque),
         websitesLinkedFromSocialPages(mosque),
         searchForOfficialMosqueWebsites(mosque),
       ]);
@@ -3215,6 +3843,169 @@ async function publishedMaghribTimeFromOffset(mosque: Mosque, offset: number) {
   }
 }
 
+const COMMUNITY_SCHEDULE_MAX_AGE_MS = 35 * 24 * 60 * 60 * 1000;
+
+function minutesInTimeZone(date: Date, timeZone?: string) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone,
+  }).formatToParts(date);
+  const part = (type: string) =>
+    Number(parts.find(item => item.type === type)?.value);
+  return part('hour') * 60 + part('minute');
+}
+
+// How far a published time may sit from the astronomical time, in minutes.
+// Wide enough for any calculation method, madhab or jama'ah delay.
+const plausibleWindows: Record<MasjidAyeshaPrayerName, [number, number]> = {
+  Fajr: [-50, 150],
+  Dhuhr: [-20, 180],
+  Asr: [-40, 180],
+  Maghrib: [-10, 60],
+  Isha: [-80, 180],
+};
+
+/**
+ * Drops published times that cannot belong to today at this mosque, such as a
+ * previous season's timetable or another city's times. Returns null when too
+ * little survives to be useful.
+ */
+export function plausiblePublishedSchedule(
+  schedule: PublishedMosquePrayerSchedule,
+  origin: Coordinates,
+  timeZone?: string,
+  date = new Date(),
+): PublishedMosquePrayerSchedule | null {
+  const calculated = calculatePrayerSchedule(origin, date).dates;
+  const sunrise = minutesInTimeZone(calculated.Sunrise, timeZone);
+  const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
+  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
+  for (const name of masjidAyeshaPrayerNames) {
+    const expected = minutesInTimeZone(calculated[name], timeZone);
+    const [earliest, latest] = plausibleWindows[name];
+    const fits = (value?: string) => {
+      if (!value) return false;
+      const minutes = displayTimeMinutes(value);
+      if (!Number.isFinite(minutes)) return false;
+      const difference = ((minutes - expected + 2160) % 1440) - 720;
+      if (difference < earliest || difference > latest) return false;
+      // A Fajr time just before sunrise is almost always Shuruq mislabelled.
+      return name !== 'Fajr' || minutes <= sunrise - 10;
+    };
+    if (fits(schedule.adhan[name])) adhan[name] = schedule.adhan[name];
+    if (fits(schedule.iqamah[name])) iqamah[name] = schedule.iqamah[name];
+  }
+  const kept = masjidAyeshaPrayerNames.filter(
+    name => adhan[name] || iqamah[name],
+  ).length;
+  if (kept < 3 && !(kept && schedule.jummah.length)) return null;
+  return { ...schedule, adhan, iqamah };
+}
+
+/** Today's times from Mawaqit, which many mosques in Europe and Africa maintain. */
+export function parseMawaqitSearchResult(
+  candidate: any,
+): PublishedMosquePrayerSchedule | null {
+  const times: unknown[] = Array.isArray(candidate?.times)
+    ? candidate.times
+    : [];
+  if (times.length < 6) return null;
+  const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
+  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
+  // Usually [Fajr, Shuruq, Dhuhr, Asr, Maghrib, Isha], but some mosques add
+  // an extra morning entry, so read the last four from the end.
+  const last = times.length - 1;
+  const timeIndexes: Array<[MasjidAyeshaPrayerName, number]> = [
+    ['Fajr', 0],
+    ['Dhuhr', last - 3],
+    ['Asr', last - 2],
+    ['Maghrib', last - 1],
+    ['Isha', last],
+  ];
+  timeIndexes.forEach(([name, index], iqamaIndex) => {
+    const start = displayClockTime(times[index]);
+    if (!start) return;
+    adhan[name] = start;
+    const iqama = String(candidate.iqama?.[iqamaIndex] ?? '').trim();
+    if (candidate.iqamaEnabled === false || !iqama) return;
+    const offset = iqama.match(/^\+?(\d{1,3})$/);
+    iqamah[name] = offset
+      ? addMinutesToDisplayTime(start, Number(offset[1]))
+      : displayClockTime(iqama);
+  });
+  if (Object.keys(adhan).length < 5) return null;
+  const jummah = [candidate.jumua, candidate.jumua2, candidate.jumua3]
+    .map(displayClockTime)
+    .filter(Boolean);
+  const slug = typeof candidate.slug === 'string' ? candidate.slug : '';
+  return {
+    adhan,
+    iqamah,
+    jummah,
+    sourceName: String(candidate.name ?? ''),
+    sourceUrl: slug ? `https://mawaqit.net/en/${slug}` : 'https://mawaqit.net/',
+    officialWebsiteUrl:
+      typeof candidate.site === 'string' && candidate.site
+        ? candidate.site
+        : undefined,
+    sourceLabel: 'Mawaqit',
+    verified: true,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+type MawaqitMatch = { candidate: any; nameScore: number; distance: number };
+
+async function fetchMawaqitNearbyCandidates(mosque: Mosque) {
+  const response = await fetchWithTimeout(
+    `https://mawaqit.net/api/2.0/mosque/search?lat=${mosque.latitude}&lon=${mosque.longitude}`,
+    6000,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!response.ok) throw new Error('Mawaqit search failed.');
+  const payload = await response.json();
+  const candidates: any[] = Array.isArray(payload) ? payload : [];
+  return candidates
+    .map(
+      (candidate): MawaqitMatch => ({
+        candidate,
+        nameScore: Math.max(
+          mosqueNameScore(mosque.name, String(candidate.name ?? '')),
+          mosqueNameScore(mosque.name, String(candidate.label ?? '')),
+        ),
+        distance:
+          Number.isFinite(candidate.latitude) &&
+          Number.isFinite(candidate.longitude)
+            ? distanceKm(mosque, {
+                latitude: candidate.latitude,
+                longitude: candidate.longitude,
+              }) * 1000
+            : Number(candidate.proximity ?? Number.POSITIVE_INFINITY),
+      }),
+    )
+    .filter(
+      match =>
+        !match.candidate.closed &&
+        (match.distance <= 60 ||
+          (match.nameScore >= 0.5 && match.distance <= 1500) ||
+          (match.nameScore >= 0.34 && match.distance <= 250)),
+    )
+    .sort(
+      (left, right) =>
+        right.nameScore - left.nameScore || left.distance - right.distance,
+    );
+}
+
+async function fetchMawaqitSchedule(mosque: Mosque) {
+  for (const { candidate } of await fetchMawaqitNearbyCandidates(mosque)) {
+    const schedule = parseMawaqitSearchResult(candidate);
+    if (schedule) return schedule;
+  }
+  return null;
+}
+
 export async function fetchMosqueIqamahSchedule(
   mosque: Mosque,
   adhanTimings?: PrayerTimings,
@@ -3251,6 +4042,25 @@ export async function fetchMosqueIqamahSchedule(
 
   for (const match of matches) {
     const candidate = match.candidate;
+    // Unverified community entries are often seeded once and never updated,
+    // so after a few weeks they show another season's times.
+    const updatedAt = Date.parse(
+      candidate.effectiveKeeperUpdatedAt ??
+        candidate.prayerSchedules?.[0]?.updatedAt ??
+        '',
+    );
+    const verifiedKeeper =
+      candidate.effectiveKeeperIsVerifiedSchedule === true ||
+      candidate.prayerSchedules?.some(
+        (schedule: any) => schedule.verificationStatus === 'verified',
+      );
+    if (
+      !verifiedKeeper &&
+      (!Number.isFinite(updatedAt) ||
+        Date.now() - updatedAt > COMMUNITY_SCHEDULE_MAX_AGE_MS)
+    ) {
+      continue;
+    }
     const activeSchedule = Array.isArray(candidate.prayerSchedules)
       ? candidate.prayerSchedules.find(
           (schedule: any) => schedule.verificationStatus === 'verified',
@@ -3326,81 +4136,131 @@ export async function fetchMosqueIqamahSchedule(
   return null;
 }
 
-async function fetchPublishedMosquePrayerScheduleUncached(
-  mosque: Mosque,
-): Promise<PublishedMosquePrayerSchedule> {
-  const [websiteResult, appResult, karbalaResult] = await Promise.allSettled([
-    settleWithin(
-      fetchVerifiedMosqueWebsiteSchedule(mosque),
-      15000,
-      'The mosque website lookup took too long.',
-    ),
-    settleWithin(
-      fetchMosqueIqamahSchedule(mosque),
-      5500,
-      'The schedule app lookup took too long.',
-    ),
-    isKarbalaMosque(mosque)
-      ? settleWithin(
-          fetchAlKafeelKarbalaPrayerSchedule(mosque),
-          6500,
-          'The Karbala schedule lookup took too long.',
-        )
-      : Promise.resolve(null),
-  ]);
+function takbeerTimeSchedule(
+  published: MosqueIqamahSchedule,
+): PublishedMosquePrayerSchedule {
+  return {
+    adhan: {},
+    iqamah: published.timings,
+    jummah: published.jummah,
+    sourceName: published.matchedMosqueName,
+    sourceUrl: 'https://takbeertime.com/',
+    sourceLabel: published.verified
+      ? 'Verified Takbeer Time schedule'
+      : 'Takbeer Time community schedule',
+    verified: published.verified,
+    maghribUsesPublishedOffset: published.maghribUsesPublishedOffset,
+    fetchedAt: published.updatedAt ?? new Date().toISOString(),
+  };
+}
 
-  if (websiteResult.status === 'fulfilled') {
-    const website = websiteResult.value;
-    if (appResult.status !== 'fulfilled' || !appResult.value) return website;
-
-    const app = appResult.value;
-    const iqamah = { ...website.iqamah };
-    let usedAppSchedule = false;
-    let maghribUsesPublishedOffset = false;
+/** Fills prayers the primary source left blank from the supporting ones. */
+function withSupportingSchedules(
+  primary: PublishedMosquePrayerSchedule,
+  supporting: PublishedMosquePrayerSchedule[],
+) {
+  const adhan = { ...primary.adhan };
+  const iqamah = { ...primary.iqamah };
+  let jummah = primary.jummah.slice(0, 3);
+  const used = new Set<string>();
+  let maghribUsesPublishedOffset = primary.maghribUsesPublishedOffset ?? false;
+  for (const schedule of supporting) {
     for (const name of masjidAyeshaPrayerNames) {
-      if (!iqamah[name] && app.timings[name]) {
-        iqamah[name] = app.timings[name];
-        usedAppSchedule = true;
-        if (name === 'Maghrib' && app.maghribUsesPublishedOffset) {
+      if (!adhan[name] && schedule.adhan[name]) {
+        adhan[name] = schedule.adhan[name];
+        used.add(schedule.sourceLabel);
+      }
+      if (!iqamah[name] && schedule.iqamah[name]) {
+        iqamah[name] = schedule.iqamah[name];
+        used.add(schedule.sourceLabel);
+        if (name === 'Maghrib' && schedule.maghribUsesPublishedOffset) {
           maghribUsesPublishedOffset = true;
         }
       }
     }
-    const jummah = website.jummah.length
-      ? website.jummah.slice(0, 3)
-      : app.jummah.slice(0, 3);
-    if (!website.jummah.length && jummah.length) usedAppSchedule = true;
+    if (!jummah.length && schedule.jummah.length) {
+      jummah = schedule.jummah.slice(0, 3);
+      used.add(schedule.sourceLabel);
+    }
+  }
+  const supportingSchedules = supporting.filter(schedule =>
+    used.has(schedule.sourceLabel),
+  );
+  return {
+    ...primary,
+    adhan,
+    iqamah,
+    jummah,
+    sourceLabel: [
+      primary.sourceLabel,
+      ...supportingSchedules.map(schedule =>
+        schedule.sourceLabel.replace(
+          /^(Verified )?Takbeer Time.*$/,
+          'Takbeer Time',
+        ),
+      ),
+    ].join(' + '),
+    verified:
+      primary.verified &&
+      supportingSchedules.every(schedule => schedule.verified),
+    maghribUsesPublishedOffset,
+    fetchedAt: new Date().toISOString(),
+  };
+}
 
-    return {
-      ...website,
-      iqamah,
-      jummah,
-      sourceLabel: usedAppSchedule
-        ? `${website.sourceLabel} + Takbeer Time`
-        : website.sourceLabel,
-      verified: website.verified && (!usedAppSchedule || app.verified),
-      maghribUsesPublishedOffset,
-      fetchedAt: new Date().toISOString(),
-    };
-  }
-  if (appResult.status === 'fulfilled' && appResult.value) {
-    const published = appResult.value;
-    return {
-      adhan: {},
-      iqamah: published.timings,
-      jummah: published.jummah,
-      sourceName: published.matchedMosqueName,
-      sourceUrl: 'https://takbeertime.com/',
-      sourceLabel: published.verified
-        ? 'Verified Takbeer Time schedule'
-        : 'Takbeer Time community schedule',
-      verified: published.verified,
-      maghribUsesPublishedOffset: published.maghribUsesPublishedOffset,
-      fetchedAt: published.updatedAt ?? new Date().toISOString(),
-    };
-  }
-  if (karbalaResult.status === 'fulfilled' && karbalaResult.value) {
-    return karbalaResult.value;
+async function fetchPublishedMosquePrayerScheduleUncached(
+  mosque: Mosque,
+  timeZone?: string,
+): Promise<PublishedMosquePrayerSchedule> {
+  const [websiteResult, mawaqitResult, appResult, karbalaResult] =
+    await Promise.allSettled([
+      settleWithin(
+        fetchVerifiedMosqueWebsiteSchedule(mosque),
+        20000,
+        'The mosque website lookup took too long.',
+      ),
+      settleWithin(
+        fetchMawaqitSchedule(mosque),
+        7000,
+        'The Mawaqit lookup took too long.',
+      ),
+      settleWithin(
+        fetchMosqueIqamahSchedule(mosque),
+        6000,
+        'The schedule app lookup took too long.',
+      ),
+      isKarbalaMosque(mosque)
+        ? settleWithin(
+            fetchAlKafeelKarbalaPrayerSchedule(mosque),
+            6500,
+            'The Karbala schedule lookup took too long.',
+          )
+        : Promise.resolve(null),
+    ]);
+
+  // Best source first: the mosque's own website, then Mawaqit (also run by the
+  // mosque), then Takbeer Time. Each is checked against the sky before use.
+  const candidates = [
+    websiteResult.status === 'fulfilled' ? websiteResult.value : null,
+    mawaqitResult.status === 'fulfilled' ? mawaqitResult.value : null,
+    appResult.status === 'fulfilled' && appResult.value
+      ? takbeerTimeSchedule(appResult.value)
+      : null,
+    karbalaResult.status === 'fulfilled' ? karbalaResult.value : null,
+  ]
+    .filter((schedule): schedule is PublishedMosquePrayerSchedule =>
+      Boolean(schedule),
+    )
+    .map(schedule => plausiblePublishedSchedule(schedule, mosque, timeZone))
+    .filter((schedule): schedule is PublishedMosquePrayerSchedule =>
+      Boolean(schedule),
+    );
+
+  if (candidates.length) {
+    const [primary, ...supporting] = candidates;
+    return supporting.length
+      ? withSupportingSchedules(primary, supporting)
+      : primary;
   }
 
   throw new Error(
@@ -3412,6 +4272,8 @@ async function fetchPublishedMosquePrayerScheduleUncached(
 
 type PublishedScheduleFetchOptions = {
   forceRefresh?: boolean;
+  /** Time zone of the mosque, when it differs from the device's. */
+  timeZone?: string;
 };
 
 type PublishedScheduleCacheEntry = {
@@ -3457,6 +4319,7 @@ export async function fetchPublishedMosquePrayerSchedule(
 
   const networkRequest = fetchPublishedMosquePrayerScheduleUncached(
     mosque,
+    options.timeZone,
   ).then(schedule => {
     publishedScheduleCache.set(cacheKey, {
       expiresAt: Date.now() + PUBLISHED_SCHEDULE_CACHE_TTL_MS,
@@ -3466,7 +4329,7 @@ export async function fetchPublishedMosquePrayerSchedule(
   });
   const boundedRequest = settleWithin(
     networkRequest,
-    16000,
+    22000,
     'The published schedule lookup took too long.',
   )
     .catch(failure => {

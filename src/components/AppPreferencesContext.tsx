@@ -80,6 +80,8 @@ type AppPreferencesContextValue = {
   locationLoading: boolean;
   locationError: string;
   preferencesRestored: boolean;
+  /** Time zone of a city chosen in Settings; undefined means the device's. */
+  locationTimeZone?: string;
   refreshDeviceLocation: () => Promise<void>;
 };
 
@@ -312,8 +314,13 @@ export function AppPreferencesProvider({
     preferences.locationMode === 'custom'
       ? preferences.customLocation
       : deviceLocation;
+  const locationTimeZone =
+    preferences.locationMode === 'custom'
+      ? preferences.customLocation?.timeZone
+      : undefined;
   const value = useMemo(
     () => ({
+      locationTimeZone,
       preferences,
       updatePreferences,
       activeLocation,
@@ -328,6 +335,7 @@ export function AppPreferencesProvider({
       deviceLocation,
       locationError,
       locationLoading,
+      locationTimeZone,
       preferences,
       refreshDeviceLocation,
       restored,

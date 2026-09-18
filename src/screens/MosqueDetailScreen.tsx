@@ -28,6 +28,7 @@ import {
   useThemeStyles,
 } from '../components/DesignSystem';
 import { useSelectedMosque } from '../components/SelectedMosqueContext';
+import { useAppPreferences } from '../components/AppPreferencesContext';
 import {
   findOfficialMosqueWebsite,
   fetchPublishedMosquePrayerSchedule,
@@ -39,6 +40,7 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
   const { selectedMosque, selectMosque } = useSelectedMosque();
+  const { locationTimeZone } = useAppPreferences();
   const { mosque } = route.params;
   const isHomeMosque = selectedMosque?.id === mosque.id;
   const [schedule, setSchedule] =
@@ -54,7 +56,10 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
       setSchedule(null);
       try {
         setSchedule(
-          await fetchPublishedMosquePrayerSchedule(mosque, { forceRefresh }),
+          await fetchPublishedMosquePrayerSchedule(mosque, {
+            forceRefresh,
+            timeZone: locationTimeZone,
+          }),
         );
       } catch (failure) {
         setError(
@@ -66,7 +71,7 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
         setLoading(false);
       }
     },
-    [mosque],
+    [locationTimeZone, mosque],
   );
 
   useEffect(() => {

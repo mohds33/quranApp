@@ -14,7 +14,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import MapView, { Marker, Region } from 'react-native-maps';
 import {
   ChevronRight,
@@ -80,6 +83,7 @@ type LoadForOriginOptions = {
 };
 
 export default function MosqueFinderScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { palette, isDark } = useAppTheme();
   const theme = useThemeStyles();
   const { selectedMosque: homeMosque, selectMosque } = useSelectedMosque();
@@ -508,7 +512,10 @@ export default function MosqueFinderScreen({ navigation }: any) {
         ) : null}
       </MapView>
 
-      <View pointerEvents="box-none" style={styles.topOverlay}>
+      <View
+        pointerEvents="box-none"
+        style={[styles.topOverlay, { top: insets.top + 10 }]}
+      >
         <View style={styles.headingRow}>
           <View>
             <Text style={[styles.title, theme.text]}>Mosques</Text>
