@@ -120,3 +120,50 @@ describe('custom city time zones', () => {
     expect(restored.customLocation?.timeZone).toBeUndefined();
   });
 });
+
+describe('duas', () => {
+  const {
+    dailyDua,
+    duaCategories,
+    findDuas,
+    getQuranDuas,
+    hisnChapters,
+    searchDuas,
+  } = require('../src/data/duas');
+
+  it('bundles all of Hisn al-Muslim and files every chapter once', () => {
+    expect(hisnChapters).toHaveLength(132);
+    const filed = duaCategories.flatMap((category: any) =>
+      category.chapters.map((chapter: any) => chapter.id),
+    );
+    expect(new Set(filed).size).toBe(132);
+    expect(
+      hisnChapters.every((chapter: any) =>
+        chapter.duas.every((dua: any) => dua.arabic || dua.translation),
+      ),
+    ).toBe(true);
+  });
+
+  it('builds Quranic duas in the chosen translation', () => {
+    const english = getQuranDuas('en');
+    const farsi = getQuranDuas('fa');
+    const rabbana = english.find((dua: any) => dua.key === 'q2:201');
+    expect(rabbana.translation).toMatch(/give us in this world/i);
+    expect(farsi.find((dua: any) => dua.key === 'q2:201').translation).not.toBe(
+      rabbana.translation,
+    );
+    expect(dailyDua('en', new Date(2026, 8, 18)).key).toMatch(/^q\d+:\d+$/);
+  });
+
+  it('searches duas and restores saved ones', () => {
+    expect(searchDuas('travel', 'en').length).toBeGreaterThan(0);
+    expect(searchDuas('zz', 'en')).toEqual([]);
+    expect(
+      findDuas(['h1', 'q2:201', 'missing'], 'en').map((dua: any) => dua.key),
+    ).toEqual(['h1', 'q2:201']);
+    expect(
+      validSavedPreferences({ savedDuas: ['h1', 'h1', 'q2:201', 'bad', 7] })
+        .savedDuas,
+    ).toEqual(['h1', 'q2:201']);
+  });
+});

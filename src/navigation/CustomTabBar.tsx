@@ -70,10 +70,20 @@ function TabButton({ route, isFocused, onPress }: any) {
 
 function MiniPlayer({ navigation }: any) {
   const { palette } = useAppTheme();
-  const { current, paused, buffering, togglePause, stop, next, previous } =
-    useQuranAudio();
-  if (!current) return null;
-  const surah = surahs.find(item => item.number === current.surah);
+  const {
+    current,
+    clip,
+    paused,
+    buffering,
+    togglePause,
+    stop,
+    next,
+    previous,
+  } = useQuranAudio();
+  if (!current && !clip) return null;
+  const surah = current
+    ? surahs.find(item => item.number === current.surah)
+    : undefined;
   const controlColor = palette.green;
   return (
     <View
@@ -84,12 +94,19 @@ function MiniPlayer({ navigation }: any) {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Open ${surah?.name} verse ${current.ayah}`}
+        accessibilityLabel={
+          current ? `Open ${surah?.name} verse ${current.ayah}` : clip?.title
+        }
         onPress={() =>
-          navigation.navigate('Quran', {
-            screen: 'SurahDetail',
-            params: { surahNumber: current.surah, ayahNumber: current.ayah },
-          })
+          current
+            ? navigation.navigate('Quran', {
+                screen: 'SurahDetail',
+                params: {
+                  surahNumber: current.surah,
+                  ayahNumber: current.ayah,
+                },
+              })
+            : navigation.navigate('Duas')
         }
         style={styles.playerCopy}
       >
@@ -97,23 +114,24 @@ function MiniPlayer({ navigation }: any) {
           numberOfLines={1}
           style={[styles.playerTitle, { color: palette.ink }]}
         >
-          {surah?.name} · Verse {current.ayah}
+          {current ? `${surah?.name} · Verse ${current.ayah}` : clip?.title}
         </Text>
         <Text
           numberOfLines={1}
           style={[styles.playerMeta, { color: palette.muted }]}
         >
-          {RECITER_NAME}
+          {current ? RECITER_NAME : 'Dua recitation'}
         </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Previous verse"
+        disabled={!current}
         hitSlop={8}
         onPress={previous}
         style={styles.playerButton}
       >
-        <SkipBack size={18} color={controlColor} />
+        <SkipBack size={18} color={current ? controlColor : palette.line} />
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -132,11 +150,12 @@ function MiniPlayer({ navigation }: any) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Next verse"
+        disabled={!current}
         hitSlop={8}
         onPress={next}
         style={styles.playerButton}
       >
-        <SkipForward size={18} color={controlColor} />
+        <SkipForward size={18} color={current ? controlColor : palette.line} />
       </Pressable>
       <Pressable
         accessibilityRole="button"

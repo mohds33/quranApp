@@ -1,13 +1,33 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
-  CloudSun,
+  BedDouble,
+  BookOpen,
+  ChevronRight,
+  CloudRain,
   Heart,
-  Home,
-  Moon,
-  Shield,
+  HeartPulse,
+  House,
+  Landmark,
+  Pause,
+  Play,
+  Plane,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Sunrise,
+  Users,
+  Utensils,
+  X,
 } from 'lucide-react-native';
 import {
   colors,
@@ -17,320 +37,457 @@ import {
   useThemeStyles,
 } from '../components/DesignSystem';
 import { useAppPreferences } from '../components/AppPreferencesContext';
-import { quranLanguageOptions, type QuranLanguageCode } from '../data/quran';
+import { useQuranAudio } from '../components/QuranAudioContext';
+import {
+  categoryDuaCount,
+  dailyDua,
+  duaCategories,
+  findDuas,
+  getQuranDuas,
+  hisnChapters,
+  searchDuas,
+  type Dua,
+  type DuaCategoryKey,
+} from '../data/duas';
 
-type LocalizedText = Record<QuranLanguageCode, string>;
-
-type DuaCollection = {
-  Icon: React.ComponentType<any>;
-  title: string;
-  count: string;
-  arabic: string;
-  translation: LocalizedText;
-  source?: string;
+const categoryIcons: Record<DuaCategoryKey, React.ComponentType<any>> = {
+  morningEvening: Sunrise,
+  sleep: BedDouble,
+  prayer: Landmark,
+  daily: House,
+  food: Utensils,
+  travel: Plane,
+  hardship: ShieldCheck,
+  forgiveness: Sparkles,
+  family: Users,
+  illness: HeartPulse,
+  nature: CloudRain,
+  hajj: Landmark,
 };
 
-const dailyDua = {
-  arabic: 'رَبِّ زِدْنِي عِلْمًا',
-  source: 'Taha · 20:114',
-  translation: {
-    en: 'My Lord, increase me in knowledge.',
-    bn: 'হে আমার রব, আমার জ্ঞান বৃদ্ধি করুন।',
-    zh: '我的主啊，求你增加我的知识。',
-    es: 'Señor mío, aumenta mi conocimiento.',
-    fr: 'Seigneur, augmente mon savoir.',
-    fa: 'پروردگارا، دانش مرا افزون کن.',
-    id: 'Ya Tuhanku, tambahkanlah ilmuku.',
-    ru: 'Господи, увеличь мои знания.',
-    sv: 'Min Herre, öka min kunskap.',
-    tr: 'Rabbim, ilmimi artır.',
-    ur: 'اے میرے رب، میرے علم میں اضافہ فرما۔',
-  },
-};
+type DuaView =
+  | { type: 'home' }
+  | { type: 'category'; key: DuaCategoryKey }
+  | { type: 'chapter'; id: number }
+  | { type: 'quran' }
+  | { type: 'saved' };
 
-const collections: DuaCollection[] = [
-  {
-    Icon: CloudSun,
-    title: 'Morning',
-    count: '12 duas',
-    arabic: 'اللَّهُمَّ بِكَ أَصْبَحْنَا',
-    translation: {
-      en: 'O Allah, by You we enter the morning.',
-      bn: 'হে আল্লাহ, আপনার সাহায্যেই আমরা সকালে উপনীত হলাম।',
-      zh: '真主啊，凭借你我们进入清晨。',
-      es: 'Oh Allah, por Ti llegamos a la mañana.',
-      fr: 'O Allah, par Toi nous entrons dans le matin.',
-      fa: 'خدایا، به یاری تو وارد صبح شدیم.',
-      id: 'Ya Allah, dengan pertolongan-Mu kami memasuki pagi.',
-      ru: 'О Аллах, благодаря Тебе мы встретили утро.',
-      sv: 'O Allah, genom Dig går vi in i morgonen.',
-      tr: 'Allahım, Seninle sabaha eriştik.',
-      ur: 'اے اللہ، تیرے ہی ذریعے ہم صبح میں داخل ہوئے۔',
-    },
-  },
-  {
-    Icon: Moon,
-    title: 'Evening',
-    count: '14 duas',
-    arabic: 'اللَّهُمَّ بِكَ أَمْسَيْنَا',
-    translation: {
-      en: 'O Allah, by You we enter the evening.',
-      bn: 'হে আল্লাহ, আপনার সাহায্যেই আমরা সন্ধ্যায় উপনীত হলাম।',
-      zh: '真主啊，凭借你我们进入夜晚。',
-      es: 'Oh Allah, por Ti llegamos a la noche.',
-      fr: 'O Allah, par Toi nous entrons dans le soir.',
-      fa: 'خدایا، به یاری تو وارد شام شدیم.',
-      id: 'Ya Allah, dengan pertolongan-Mu kami memasuki petang.',
-      ru: 'О Аллах, благодаря Тебе мы встретили вечер.',
-      sv: 'O Allah, genom Dig går vi in i kvällen.',
-      tr: 'Allahım, Seninle akşama eriştik.',
-      ur: 'اے اللہ، تیرے ہی ذریعے ہم شام میں داخل ہوئے۔',
-    },
-  },
-  {
-    Icon: Shield,
-    title: 'Protection',
-    count: '9 duas',
-    arabic: 'أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ',
-    translation: {
-      en: 'I seek refuge in the perfect words of Allah.',
-      bn: 'আমি আল্লাহর পরিপূর্ণ কথাগুলোর আশ্রয় চাই।',
-      zh: '我求真主完美的话语庇护。',
-      es: 'Busco refugio en las palabras perfectas de Allah.',
-      fr: "Je cherche refuge dans les paroles parfaites d'Allah.",
-      fa: 'به کلمات کامل خدا پناه می‌برم.',
-      id: 'Aku berlindung dengan kalimat-kalimat Allah yang sempurna.',
-      ru: 'Я ищу защиты в совершенных словах Аллаха.',
-      sv: 'Jag söker skydd i Allahs fullkomliga ord.',
-      tr: 'Allah’ın eksiksiz kelimelerine sığınırım.',
-      ur: 'میں اللہ کے کامل کلمات کی پناہ مانگتا ہوں۔',
-    },
-  },
-  {
-    Icon: Home,
-    title: 'Home & family',
-    count: '11 duas',
-    arabic:
-      'رَبَّنَا هَبْ لَنَا مِنْ أَزْوَاجِنَا وَذُرِّيَّاتِنَا قُرَّةَ أَعْيُنٍ',
-    translation: {
-      en: 'Our Lord, bless us with spouses and offspring who will be the joy of our hearts.',
-      bn: 'হে আমাদের রব, আমাদের জীবনসঙ্গী ও সন্তানদের আমাদের চোখের শীতলতা করুন।',
-      zh: '我们的主啊，求你使我们的配偶和子孙成为我们眼中的慰藉。',
-      es: 'Señor nuestro, concédenos cónyuges e hijos que sean alegría para nuestros corazones.',
-      fr: 'Notre Seigneur, accorde-nous des époux et des enfants qui réjouissent nos coeurs.',
-      fa: 'پروردگارا، همسران و فرزندانمان را روشنی چشم ما قرار ده.',
-      id: 'Ya Tuhan kami, anugerahkanlah kepada kami pasangan dan keturunan yang menyejukkan hati.',
-      ru: 'Господи наш, даруй нам супругов и потомство, которые будут радостью для наших сердец.',
-      sv: 'Vår Herre, ge oss makar och barn som skänker våra hjärtan glädje.',
-      tr: 'Rabbimiz, eşlerimizi ve çocuklarımızı göz aydınlığı kıl.',
-      ur: 'اے ہمارے رب، ہمارے شریک حیات اور اولاد کو ہماری آنکھوں کی ٹھنڈک بنا۔',
-    },
-  },
-];
+const rtlLanguages = new Set(['fa', 'ur']);
+
+function DuaCard({
+  dua,
+  saved,
+  onToggleSaved,
+  showSource = true,
+  rtlTranslation = false,
+}: {
+  dua: Dua;
+  saved: boolean;
+  onToggleSaved: () => void;
+  showSource?: boolean;
+  rtlTranslation?: boolean;
+}) {
+  const { palette } = useAppTheme();
+  const theme = useThemeStyles();
+  const audio = useQuranAudio();
+  const playing = audio.clip?.key === dua.key && !audio.paused;
+  return (
+    <View style={[styles.dua, theme.card]}>
+      {dua.arabic ? (
+        <Text style={[styles.duaArabic, theme.text]}>{dua.arabic}</Text>
+      ) : null}
+      {dua.transliteration ? (
+        <Text style={[styles.transliteration, { color: palette.green }]}>
+          {dua.transliteration}
+        </Text>
+      ) : null}
+      {dua.translation ? (
+        <Text
+          style={[
+            styles.duaTranslation,
+            theme.mutedText,
+            rtlTranslation && styles.rtl,
+          ]}
+        >
+          {dua.translation}
+        </Text>
+      ) : null}
+      <View style={styles.duaFooter}>
+        <View style={styles.duaMeta}>
+          {dua.repeat > 1 ? (
+            <Text
+              style={[
+                styles.repeat,
+                { backgroundColor: palette.mint, color: palette.green },
+              ]}
+            >
+              ×{dua.repeat}
+            </Text>
+          ) : null}
+          {showSource ? (
+            <Text numberOfLines={1} style={[styles.source, theme.mutedText]}>
+              {dua.source}
+            </Text>
+          ) : null}
+        </View>
+        {dua.audio ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={playing ? 'Pause dua' : 'Play dua'}
+            hitSlop={8}
+            onPress={() =>
+              audio.clip?.key === dua.key
+                ? audio.togglePause()
+                : audio.playClip({
+                    key: dua.key,
+                    url: dua.audio!,
+                    title: dua.source.replace(/^Hisn al-Muslim · /, ''),
+                  })
+            }
+          >
+            {playing ? (
+              <Pause size={19} color={palette.green} fill={palette.green} />
+            ) : (
+              <Play size={19} color={palette.green} />
+            )}
+          </Pressable>
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={saved ? 'Remove saved dua' : 'Save dua'}
+          hitSlop={8}
+          onPress={onToggleSaved}
+        >
+          <Heart
+            size={19}
+            color={palette.gold}
+            fill={saved ? palette.gold : 'transparent'}
+          />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 export default function DuasScreen() {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { preferences } = useAppPreferences();
-  const activeLanguage =
-    quranLanguageOptions.find(
-      option => option.code === preferences.quranLanguage,
-    ) ?? quranLanguageOptions[0];
-  const [selected, setSelected] = useState<string | null>(null);
-  const [favourites, setFavourites] = useState<string[]>(['Morning']);
-  const [showSaved, setShowSaved] = useState(false);
-  const visibleCollections = useMemo(
-    () =>
-      showSaved
-        ? collections.filter(item => favourites.includes(item.title))
-        : collections,
-    [showSaved, favourites],
-  );
-  const selectedCollection = collections.find(item => item.title === selected);
-  const localized = (translation: LocalizedText) =>
-    translation[preferences.quranLanguage] ?? translation.en;
-  const toggleFavourite = (title: string) =>
-    setFavourites(items =>
-      items.includes(title)
-        ? items.filter(item => item !== title)
-        : [...items, title],
-    );
+  const { preferences, updatePreferences } = useAppPreferences();
+  const language = preferences.quranLanguage;
+  const [view, setView] = useState<DuaView>({ type: 'home' });
+  const [query, setQuery] = useState('');
+  const scrollRef = useRef<ScrollView>(null);
 
-  return (
-    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
-      <ScrollView contentContainerStyle={shared.content}>
+  const saved = preferences.savedDuas;
+  const toggleSaved = (key: string) =>
+    updatePreferences({
+      savedDuas: saved.includes(key)
+        ? saved.filter(item => item !== key)
+        : [...saved, key],
+    });
+  const go = (next: DuaView) => {
+    setView(next);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
+
+  const today = useMemo(() => dailyDua(language), [language]);
+  const quranDuas = useMemo(() => getQuranDuas(language), [language]);
+  const results = useMemo(() => searchDuas(query, language), [language, query]);
+  const savedDuas = useMemo(
+    () => findDuas(saved, language).reverse(),
+    [language, saved],
+  );
+
+  const card = (dua: Dua, showSource = true) => (
+    <DuaCard
+      key={dua.key}
+      dua={dua}
+      saved={saved.includes(dua.key)}
+      onToggleSaved={() => toggleSaved(dua.key)}
+      showSource={showSource}
+      rtlTranslation={dua.key.startsWith('q') && rtlLanguages.has(language)}
+    />
+  );
+
+  const back = (label: string, target: DuaView) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Back to ${label}`}
+      onPress={() => go(target)}
+      style={styles.back}
+    >
+      <ArrowLeft size={18} color={palette.green} />
+      <Text style={[styles.backText, { color: palette.green }]}>{label}</Text>
+    </Pressable>
+  );
+
+  let content: React.ReactNode;
+  if (view.type === 'category') {
+    const category = duaCategories.find(item => item.key === view.key)!;
+    content = (
+      <>
+        {back('All duas', { type: 'home' })}
         <ScreenTitle
-          title={
-            selectedCollection?.title ?? (showSaved ? 'Saved duas' : 'Duas')
-          }
-          subtitle={
-            selectedCollection
-              ? selectedCollection.count
-              : showSaved
-              ? `${favourites.length} favourites`
-              : 'Words for every moment'
-          }
+          title={category.title}
+          subtitle={`${categoryDuaCount(category)} duas · Hisn al-Muslim`}
         />
-        {selectedCollection ? (
-          <>
+        <View style={[styles.list, theme.card]}>
+          {category.chapters.map(chapter => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Back to Dua collections"
-              onPress={() => setSelected(null)}
-              style={styles.back}
+              key={chapter.id}
+              onPress={() => go({ type: 'chapter', id: chapter.id })}
+              style={[styles.row, theme.border]}
             >
-              <ArrowLeft size={18} color={palette.green} />
-              <Text style={[styles.backText, { color: palette.green }]}>
-                All collections
-              </Text>
-            </Pressable>
-            <View style={styles.feature}>
-              <Text style={styles.label}>
-                {selectedCollection.title.toUpperCase()}
-              </Text>
-              <View style={styles.languageHeader}>
-                <Text style={styles.languageLabel}>Arabic</Text>
-                <Text style={styles.languageMeta}>
-                  {activeLanguage.label} translation
+              <View style={styles.rowCopy}>
+                <Text style={[styles.rowTitle, theme.text]}>
+                  {chapter.title}
+                </Text>
+                <Text style={[styles.rowMeta, theme.mutedText]}>
+                  {chapter.duas.length}{' '}
+                  {chapter.duas.length === 1 ? 'dua' : 'duas'}
                 </Text>
               </View>
-              <Text style={styles.arabic}>{selectedCollection.arabic}</Text>
-              <Text style={styles.translation}>
-                {localized(selectedCollection.translation)}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Toggle favourite"
-                onPress={() => toggleFavourite(selectedCollection.title)}
-                style={styles.favourite}
-              >
-                <Heart
-                  size={18}
-                  color={colors.gold}
-                  fill={
-                    favourites.includes(selectedCollection.title)
-                      ? colors.gold
-                      : 'transparent'
-                  }
-                />
-                <Text style={styles.favouriteText}>
-                  {favourites.includes(selectedCollection.title)
-                    ? 'Saved'
-                    : 'Save dua'}
-                </Text>
-              </Pressable>
-            </View>
+              <ChevronRight size={16} color={palette.muted} />
+            </Pressable>
+          ))}
+        </View>
+      </>
+    );
+  } else if (view.type === 'chapter') {
+    const chapter = hisnChapters.find(item => item.id === view.id)!;
+    const parent = duaCategories.find(item =>
+      item.chapters.some(entry => entry.id === chapter.id),
+    );
+    content = (
+      <>
+        {parent && parent.chapters.length > 1
+          ? back(parent.title, { type: 'category', key: parent.key })
+          : back('All duas', { type: 'home' })}
+        <Text style={[styles.chapterArabic, theme.text]}>
+          {chapter.arabicTitle}
+        </Text>
+        <ScreenTitle
+          title={chapter.title}
+          subtitle={`${chapter.duas.length} ${
+            chapter.duas.length === 1 ? 'dua' : 'duas'
+          } · Hisn al-Muslim`}
+        />
+        {language !== 'en' ? (
+          <Text style={[styles.note, theme.mutedText]}>
+            Hisn al-Muslim translations are in English.
+          </Text>
+        ) : null}
+        {chapter.duas.map(dua => card(dua, false))}
+      </>
+    );
+  } else if (view.type === 'quran') {
+    content = (
+      <>
+        {back('All duas', { type: 'home' })}
+        <ScreenTitle
+          title="Duas from the Quran"
+          subtitle={`${quranDuas.length} supplications in your Quran translation`}
+        />
+        {quranDuas.map(dua => card(dua))}
+      </>
+    );
+  } else if (view.type === 'saved') {
+    content = (
+      <>
+        {back('All duas', { type: 'home' })}
+        <ScreenTitle
+          title="Saved duas"
+          subtitle={`${savedDuas.length} saved`}
+        />
+        {savedDuas.map(dua => card(dua))}
+        {!savedDuas.length ? (
+          <Text style={[styles.empty, theme.mutedText]}>
+            Tap the heart on any dua to keep it here.
+          </Text>
+        ) : null}
+      </>
+    );
+  } else {
+    content = (
+      <>
+        <View style={styles.header}>
+          <ScreenTitle title="Duas" subtitle="Words for every moment" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show saved duas"
+            onPress={() => go({ type: 'saved' })}
+            style={[styles.savedButton, theme.card]}
+          >
+            <Heart
+              size={20}
+              color={palette.gold}
+              fill={saved.length ? palette.gold : 'transparent'}
+            />
+          </Pressable>
+        </View>
+        <View style={[styles.search, theme.card]}>
+          <Search size={19} color={palette.muted} />
+          <TextInput
+            accessibilityLabel="Search duas"
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search duas, e.g. travel, anxiety, rain"
+            placeholderTextColor={palette.muted}
+            returnKeyType="search"
+            style={[styles.input, theme.text]}
+          />
+          {query ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              onPress={() => setQuery('')}
+            >
+              <X size={18} color={palette.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {query.trim().length >= 3 ? (
+          <>
+            <Text style={[styles.section, theme.mutedText]}>
+              {results.length
+                ? `${results.length === 40 ? '40+' : results.length} RESULTS`
+                : 'NO RESULTS'}
+            </Text>
+            {results.map(({ dua }) => card(dua))}
           </>
         ) : (
           <>
-            {!showSaved ? (
-              <View style={styles.feature}>
-                <Text style={styles.label}>DUA OF THE DAY</Text>
-                <View style={styles.languageHeader}>
-                  <Text style={styles.languageLabel}>Arabic</Text>
-                  <Text style={styles.languageMeta}>
-                    {activeLanguage.label} translation
-                  </Text>
-                </View>
-                <Text style={styles.arabic}>{dailyDua.arabic}</Text>
-                <Text style={styles.translation}>
-                  {localized(dailyDua.translation)}
-                </Text>
-                <Text style={styles.source}>{dailyDua.source}</Text>
+            <View style={styles.feature}>
+              <Text style={styles.label}>DUA OF THE DAY</Text>
+              <Text style={styles.featureArabic}>{today.arabic}</Text>
+              <Text
+                style={[
+                  styles.featureTranslation,
+                  rtlLanguages.has(language) && styles.rtl,
+                ]}
+              >
+                {today.translation}
+              </Text>
+              <View style={styles.featureFooter}>
+                <Text style={styles.featureSource}>{today.source}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    saved.includes(today.key)
+                      ? 'Remove saved dua'
+                      : 'Save dua of the day'
+                  }
+                  hitSlop={8}
+                  onPress={() => toggleSaved(today.key)}
+                >
+                  <Heart
+                    size={18}
+                    color={colors.gold}
+                    fill={
+                      saved.includes(today.key) ? colors.gold : 'transparent'
+                    }
+                  />
+                </Pressable>
               </View>
-            ) : null}
+            </View>
+
             <Text style={[styles.section, theme.mutedText]}>
-              {showSaved ? 'FAVOURITES' : 'COLLECTIONS'}
+              HISN AL-MUSLIM
             </Text>
             <View style={styles.grid}>
-              {visibleCollections.map(
-                ({ Icon, title, count, arabic, translation }) => (
+              {duaCategories.map(category => {
+                const Icon = categoryIcons[category.key];
+                return (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Open ${title} duas`}
-                    onPress={() => setSelected(title)}
-                    key={title}
+                    accessibilityLabel={`Open ${category.title} duas`}
+                    key={category.key}
+                    onPress={() =>
+                      category.chapters.length === 1
+                        ? go({ type: 'chapter', id: category.chapters[0].id })
+                        : go({ type: 'category', key: category.key })
+                    }
                     style={[styles.card, theme.card]}
                   >
                     <View
                       style={[styles.icon, { backgroundColor: palette.mint }]}
                     >
-                      <Icon size={22} color={palette.green} />
+                      <Icon size={20} color={palette.green} />
                     </View>
-                    <Text style={[styles.title, theme.text]}>{title}</Text>
-                    <Text style={[styles.count, theme.mutedText]}>{count}</Text>
-                    <Text
-                      numberOfLines={2}
-                      style={[styles.cardArabic, theme.text]}
-                    >
-                      {arabic}
+                    <Text style={[styles.title, theme.text]}>
+                      {category.title}
                     </Text>
-                    <Text
-                      numberOfLines={2}
-                      style={[styles.cardTranslation, theme.mutedText]}
-                    >
-                      {localized(translation)}
+                    <Text style={[styles.count, theme.mutedText]}>
+                      {categoryDuaCount(category)} duas
                     </Text>
                   </Pressable>
-                ),
-              )}
+                );
+              })}
             </View>
-            {showSaved && !visibleCollections.length ? (
-              <Text style={[styles.empty, theme.mutedText]}>
-                No saved duas yet.
-              </Text>
-            ) : null}
+
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={
-                showSaved ? 'Show all Dua collections' : 'Show saved Duas'
-              }
-              onPress={() => setShowSaved(value => !value)}
-              style={[
-                styles.saved,
-                theme.card,
-                showSaved && styles.savedActive,
-              ]}
+              accessibilityLabel="Open duas from the Quran"
+              onPress={() => go({ type: 'quran' })}
+              style={[styles.quranRow, theme.card]}
             >
-              <Heart
-                size={20}
-                color={showSaved ? colors.white : colors.gold}
-                fill={showSaved ? colors.white : 'transparent'}
-              />
-              <View>
-                <Text
-                  style={[
-                    styles.savedTitle,
-                    !showSaved && theme.text,
-                    showSaved && styles.savedTitleActive,
-                  ]}
-                >
-                  {showSaved ? 'All collections' : 'Saved duas'}
+              <View style={[styles.icon, { backgroundColor: palette.mint }]}>
+                <BookOpen size={20} color={palette.green} />
+              </View>
+              <View style={styles.rowCopy}>
+                <Text style={[styles.rowTitle, theme.text]}>
+                  Duas from the Quran
                 </Text>
-                <Text
-                  style={[
-                    styles.savedMeta,
-                    !showSaved && theme.mutedText,
-                    showSaved && styles.savedMetaActive,
-                  ]}
-                >
-                  {favourites.length} favourites
+                <Text style={[styles.rowMeta, theme.mutedText]}>
+                  {quranDuas.length} supplications · Rabbana and more
                 </Text>
               </View>
+              <ChevronRight size={16} color={palette.muted} />
             </Pressable>
           </>
         )}
+      </>
+    );
+  }
+
+  return (
+    <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={shared.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        {content}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  header: { flexDirection: 'row', justifyContent: 'space-between' },
+  savedButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  search: {
+    ...shared.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    gap: 10,
+    marginBottom: 18,
+  },
+  input: { color: colors.ink, fontSize: 14, flex: 1, height: 50 },
   feature: {
     backgroundColor: colors.green,
-    borderRadius: 28,
-    padding: 24,
-    marginBottom: 26,
+    borderRadius: 26,
+    padding: 22,
+    marginBottom: 24,
   },
   label: {
     color: colors.gold,
@@ -338,50 +495,27 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.2,
   },
-  languageHeader: {
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#FFFFFF22',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 18,
-    paddingVertical: 9,
-  },
-  languageLabel: {
-    color: colors.gold,
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  languageMeta: {
-    color: '#BCD3CB',
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  arabic: {
+  featureArabic: {
     color: colors.white,
-    fontSize: 29,
+    fontSize: 21,
+    lineHeight: 36,
     textAlign: 'right',
-    lineHeight: 46,
     writingDirection: 'rtl',
-    marginTop: 17,
-  },
-  translation: {
-    color: colors.white,
-    fontSize: 15,
-    lineHeight: 22,
     marginTop: 14,
   },
-  source: { color: '#BCD3CB', fontSize: 11, marginTop: 12 },
-  back: {
-    flexDirection: 'row',
-    gap: 7,
-    alignItems: 'center',
-    marginBottom: 16,
+  featureTranslation: {
+    color: colors.white,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 10,
   },
-  backText: { color: colors.green, fontWeight: '700' },
+  featureFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  featureSource: { color: '#BCD3CB', fontSize: 11 },
   section: {
     color: colors.muted,
     fontSize: 10,
@@ -389,51 +523,93 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginBottom: 12,
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 18 },
-  card: { ...shared.card, flexBasis: '47%', flexGrow: 1, padding: 17 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
+  card: { ...shared.card, flexBasis: '47%', flexGrow: 1, padding: 16 },
   icon: {
-    width: 41,
-    height: 41,
-    borderRadius: 14,
-    backgroundColor: colors.mint,
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { color: colors.ink, fontSize: 15, fontWeight: '700', marginTop: 14 },
+  title: { color: colors.ink, fontSize: 14, fontWeight: '700', marginTop: 12 },
   count: { color: colors.muted, fontSize: 11, marginTop: 3 },
-  cardArabic: {
+  quranRow: {
+    ...shared.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+  },
+  back: {
+    flexDirection: 'row',
+    gap: 7,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  backText: { color: colors.green, fontWeight: '700' },
+  list: { ...shared.card, overflow: 'hidden' },
+  row: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  rowCopy: { flex: 1 },
+  rowTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  rowMeta: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  chapterArabic: {
     color: colors.ink,
-    fontSize: 16,
-    lineHeight: 25,
-    marginTop: 13,
-    minHeight: 50,
+    fontSize: 18,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginBottom: 4,
+  },
+  note: { color: colors.muted, fontSize: 11, marginBottom: 12 },
+  dua: {
+    ...shared.card,
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+    marginBottom: 10,
+  },
+  duaArabic: {
+    color: colors.ink,
+    fontSize: 20,
+    lineHeight: 35,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
-  cardTranslation: {
-    color: colors.muted,
-    fontSize: 10,
-    lineHeight: 15,
+  transliteration: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontStyle: 'italic',
     marginTop: 8,
   },
-  saved: {
-    ...shared.card,
-    padding: 18,
+  duaTranslation: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  duaFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
+    gap: 18,
+    marginTop: 12,
   },
-  savedActive: { backgroundColor: colors.green },
-  savedTitle: { color: colors.ink, fontSize: 15, fontWeight: '700' },
-  savedTitleActive: { color: colors.white },
-  savedMeta: { color: colors.muted, fontSize: 11, marginTop: 3 },
-  savedMetaActive: { color: '#BCD3CB' },
-  empty: { color: colors.muted, textAlign: 'center', marginBottom: 20 },
-  favourite: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    marginTop: 18,
+  duaMeta: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  repeat: {
+    fontSize: 11,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
-  favouriteText: { color: colors.gold, fontWeight: '700', fontSize: 12 },
+  source: { color: colors.muted, fontSize: 11, flexShrink: 1 },
+  rtl: { textAlign: 'right', writingDirection: 'rtl' },
+  empty: { color: colors.muted, textAlign: 'center', marginTop: 20 },
 });

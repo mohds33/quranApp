@@ -51,6 +51,7 @@ export type AppPreferences = {
   quranReading: QuranReadingKey;
   quranLastRead: AyahReference | null;
   quranBookmarks: AyahReference[];
+  savedDuas: string[];
   homeMosque: Mosque | null;
   homeMosqueSchedule: SavedHomeMosqueSchedule | null;
   prayerLogs: PrayerLog[];
@@ -65,6 +66,7 @@ const defaultPreferences: AppPreferences = {
   quranReading: 'hafs',
   quranLastRead: null,
   quranBookmarks: [],
+  savedDuas: [],
   homeMosque: null,
   homeMosqueSchedule: null,
   prayerLogs: [],
@@ -216,6 +218,16 @@ export function validSavedPreferences(value: any): Partial<AppPreferences> {
     quranReading: 'hafs',
     quranLastRead: validAyahReference(value.quranLastRead, surahs),
     quranBookmarks: validAyahBookmarks(value.quranBookmarks, surahs),
+    savedDuas: Array.isArray(value.savedDuas)
+      ? [
+          ...new Set<string>(
+            value.savedDuas.filter(
+              (key: unknown): key is string =>
+                typeof key === 'string' && /^(h\d+|q\d+:\d+)$/.test(key),
+            ),
+          ),
+        ].slice(-500)
+      : [],
     homeMosque,
     homeMosqueSchedule,
     prayerLogs: validPrayerLogs(value.prayerLogs),
