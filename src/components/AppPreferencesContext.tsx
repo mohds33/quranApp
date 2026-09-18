@@ -12,6 +12,7 @@ import {
   getCurrentCoordinates,
   ResolvedLocation,
   reverseGeocodeCoordinates,
+  validTimeZone,
 } from '../services/location';
 import type { Mosque } from '../services/mosques';
 import {
@@ -199,7 +200,10 @@ export function validSavedPreferences(value: any): Partial<AppPreferences> {
     customLocation:
       Number.isFinite(value.customLocation?.latitude) &&
       Number.isFinite(value.customLocation?.longitude)
-        ? value.customLocation
+        ? {
+            ...value.customLocation,
+            timeZone: validTimeZone(value.customLocation.timeZone),
+          }
         : null,
     prayerTimeSource:
       value.prayerTimeSource === 'calculated' ? 'calculated' : 'closestMosque',

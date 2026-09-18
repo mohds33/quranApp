@@ -531,11 +531,13 @@ didFailProvisionalNavigation:(WKNavigation *)navigation
           [nonEmptyParts addObject:part];
         }
       }
+      NSTimeZone *timeZone = item.timeZone ?: item.placemark.timeZone;
       NSDictionary *result = @{
         @"latitude": @(location.coordinate.latitude),
         @"longitude": @(location.coordinate.longitude),
         @"label": nonEmptyParts.count > 0 ? [nonEmptyParts componentsJoinedByString:@", "] : trimmedQuery,
         @"address": item.placemark.title ?: trimmedQuery,
+        @"timeZone": timeZone.name ?: @"",
       };
       NSString *json = RCTJSONString(result);
       if (json == nil) {

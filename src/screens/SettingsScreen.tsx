@@ -26,16 +26,10 @@ import {
 } from '../components/DesignSystem';
 import { useAppPreferences } from '../components/AppPreferencesContext';
 import { quranLanguageOptions } from '../data/quran';
+import LocationPickerModal from '../components/LocationPickerModal';
 
 type SettingKey = 'location' | 'method' | 'translation';
-const options: Record<
-  Exclude<SettingKey, 'translation'>,
-  { title: string; values: string[] }
-> = {
-  location: {
-    title: 'Choose location',
-    values: ['Calgary, Alberta', 'Edmonton, Alberta', 'Toronto, Ontario'],
-  },
+const options: Record<'method', { title: string; values: string[] }> = {
   method: {
     title: 'Prayer calculation',
     values: ['ISNA', 'Muslim World League', 'Umm al-Qura'],
@@ -45,15 +39,20 @@ const options: Record<
 export default function SettingsScreen() {
   const { isDark, setDarkMode, palette } = useAppTheme();
   const theme = useThemeStyles();
-  const { preferences, updatePreferences } = useAppPreferences();
+  const { preferences, updatePreferences, deviceLocation, locationLoading } =
+    useAppPreferences();
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const locationLabel =
+    preferences.locationMode === 'custom' && preferences.customLocation
+      ? preferences.customLocation.label
+      : locationLoading
+      ? 'Finding your location…'
+      : `${deviceLocation?.label ?? 'Current location'} · GPS`;
   const activeLanguage =
     quranLanguageOptions.find(
       option => option.code === preferences.quranLanguage,
     ) ?? quranLanguageOptions[0];
-  const [settings, setSettings] = useState({
-    location: 'Calgary, Alberta',
-    method: 'ISNA',
-  });
+  const [settings, setSettings] = useState({ method: 'ISNA' });
   const [notifications, setNotifications] = useState(true);
   const rows = [
     { Icon: MapPin, key: 'location' as const, title: 'Location' },
@@ -65,7 +64,9 @@ export default function SettingsScreen() {
     { Icon: Globe2, key: 'translation' as const, title: 'Quran translation' },
   ];
   const choose = (key: SettingKey) =>
-    key === 'translation'
+    key === 'location'
+      ? setLocationPickerOpen(true)
+      : key === 'translation'
       ? Alert.alert('Quran translation', undefined, [
           ...quranLanguageOptions.map(option => ({
             text: `${preferences.quranLanguage === option.code ? '✓ ' : ''}${
@@ -106,6 +107,8 @@ export default function SettingsScreen() {
                 <Text style={[styles.value, theme.mutedText]}>
                   {key === 'translation'
                     ? `${activeLanguage.label} · ${activeLanguage.translator}`
+                    : key === 'location'
+                    ? locationLabel
                     : settings[key]}
                 </Text>
               </View>
@@ -148,6 +151,10 @@ export default function SettingsScreen() {
           Sakinah · Version 1.0
         </Text>
       </ScrollView>
+      <LocationPickerModal
+        visible={locationPickerOpen}
+        onClose={() => setLocationPickerOpen(false)}
+      />
     </SafeAreaView>
   );
 }

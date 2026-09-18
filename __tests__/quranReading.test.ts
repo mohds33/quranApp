@@ -82,3 +82,41 @@ describe('Quran reading progress', () => {
     ).toBeNull();
   });
 });
+
+describe('custom city time zones', () => {
+  const { calculatePrayerSchedule } = require('../src/services/prayerTimes');
+  const { validTimeZone } = require('../src/services/location');
+  const toronto = { latitude: 43.6532, longitude: -79.3832 };
+  const date = new Date('2026-09-18T18:00:00Z');
+
+  it('keeps real zones and drops invalid ones', () => {
+    expect(validTimeZone('America/Toronto')).toBe('America/Toronto');
+    expect(validTimeZone('Not/AZone')).toBeUndefined();
+    expect(validTimeZone(42)).toBeUndefined();
+  });
+
+  it('shows prayer times in the chosen city time zone', () => {
+    const schedule = calculatePrayerSchedule(
+      toronto,
+      date,
+      'northAmerica',
+      'America/Toronto',
+    );
+    const expected = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: 'America/Toronto',
+    }).format(schedule.dates.Asr);
+    expect(schedule.timings.Asr).toBe(expected);
+    expect(schedule.timings.Asr).toMatch(/^4:\d\d/);
+  });
+
+  it('restores a saved city with a sanitized zone', () => {
+    const restored = validSavedPreferences({
+      locationMode: 'custom',
+      customLocation: { ...toronto, label: 'Toronto', timeZone: 'bogus' },
+    });
+    expect(restored.locationMode).toBe('custom');
+    expect(restored.customLocation?.timeZone).toBeUndefined();
+  });
+});

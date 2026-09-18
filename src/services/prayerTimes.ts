@@ -117,13 +117,21 @@ type IqamahCandidateMatch = {
   distanceMeters: number;
 };
 
-const timeFormatter = new Intl.DateTimeFormat(undefined, {
-  hour: 'numeric',
-  minute: '2-digit',
-});
+const timeFormatters = new Map<string, Intl.DateTimeFormat>();
 
-function formatTime(date: Date) {
-  return Number.isNaN(date.getTime()) ? '—' : timeFormatter.format(date);
+function formatTime(date: Date, timeZone?: string) {
+  if (Number.isNaN(date.getTime())) return '—';
+  const key = timeZone ?? '';
+  let formatter = timeFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone,
+    });
+    timeFormatters.set(key, formatter);
+  }
+  return formatter.format(date);
 }
 
 function formatHijriDate(date: Date) {
@@ -142,6 +150,8 @@ export function calculatePrayerSchedule(
   origin: Coordinates,
   date = new Date(),
   method: CalculationMethodKey = 'northAmerica',
+  /** Show times in this zone (the chosen city's) instead of the device's. */
+  timeZone?: string,
 ): DailyPrayerSchedule {
   const methodFactories: Record<
     CalculationMethodKey,
@@ -181,7 +191,7 @@ export function calculatePrayerSchedule(
   return {
     dates,
     timings: Object.fromEntries(
-      prayerNames.map(name => [name, formatTime(dates[name])]),
+      prayerNames.map(name => [name, formatTime(dates[name], timeZone)]),
     ) as PrayerTimings,
     readableDate: new Intl.DateTimeFormat(undefined, {
       weekday: 'long',
@@ -199,6 +209,7 @@ export function getNextPrayerOccurrence(
   origin: Coordinates,
   now = new Date(),
   method: CalculationMethodKey = 'northAmerica',
+  timeZone?: string,
 ): NextPrayerOccurrence {
   const upcoming = prayerNames
     .map(name => ({
@@ -212,7 +223,12 @@ export function getNextPrayerOccurrence(
 
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowSchedule = calculatePrayerSchedule(origin, tomorrow, method);
+  const tomorrowSchedule = calculatePrayerSchedule(
+    origin,
+    tomorrow,
+    method,
+    timeZone,
+  );
   return {
     name: 'Fajr',
     date: tomorrowSchedule.dates.Fajr,

@@ -72,10 +72,17 @@ export default function HomeScreen({ navigation }: any) {
   const audio = useQuranAudio();
   const [schedule, setSchedule] = useState<DailyPrayerSchedule | null>(null);
   const [now, setNow] = useState(new Date());
+  // A city chosen in Settings shows its own local times, not the phone's.
+  const cityTimeZone =
+    preferences.locationMode === 'custom'
+      ? preferences.customLocation?.timeZone
+      : undefined;
   useEffect(() => {
     if (!selectedMosque) return;
-    setSchedule(calculatePrayerSchedule(selectedMosque, now));
-  }, [now, selectedMosque]);
+    setSchedule(
+      calculatePrayerSchedule(selectedMosque, now, undefined, cityTimeZone),
+    );
+  }, [cityTimeZone, now, selectedMosque]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30000); //updates every 30 secondss
@@ -98,7 +105,13 @@ export default function HomeScreen({ navigation }: any) {
 
   const nextPrayer =
     schedule && selectedMosque
-      ? getNextPrayerOccurrence(schedule, selectedMosque, now)
+      ? getNextPrayerOccurrence(
+          schedule,
+          selectedMosque,
+          now,
+          undefined,
+          cityTimeZone,
+        )
       : null;
   const reflection = dailyHadith(now);
 

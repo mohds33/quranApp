@@ -6,6 +6,8 @@ import type { Coordinates } from './mosques';
 export type ResolvedLocation = Coordinates & {
   label: string;
   address?: string;
+  /** IANA time zone of the place, e.g. "America/Toronto", when known. */
+  timeZone?: string;
 };
 
 Geolocation.setRNConfiguration({
@@ -44,6 +46,17 @@ export async function getCurrentCoordinates(): Promise<Coordinates> {
   );
 }
 
+export function validTimeZone(value: unknown) {
+  if (typeof value !== 'string' || !value) return undefined;
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: value,
+    }).resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+}
+
 function parsedLocation(payloadJSON: string): ResolvedLocation {
   const payload = JSON.parse(payloadJSON);
   const latitude = Number(payload.latitude);
@@ -56,6 +69,7 @@ function parsedLocation(payloadJSON: string): ResolvedLocation {
     longitude,
     label: String(payload.label ?? payload.address ?? 'Selected location'),
     address: payload.address ? String(payload.address) : undefined,
+    timeZone: validTimeZone(payload.timeZone),
   };
 }
 
