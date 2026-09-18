@@ -1,6 +1,7 @@
 const QURAN_AUDIO_BASE_URL = 'https://cdn.islamic.network/quran';
 const DEFAULT_BITRATE = 128;
 const DEFAULT_RECITER = 'ar.alafasy';
+export const RECITER_NAME = 'Mishary Rashid Alafasy';
 
 function cleanNumber(value: string | number) {
   const number = Number(value);

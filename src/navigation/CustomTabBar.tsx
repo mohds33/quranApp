@@ -1,5 +1,11 @@
 import React from 'react';
-import { View, Pressable, StyleSheet, Text } from 'react-native';
+import {
+  ActivityIndicator,
+  View,
+  Pressable,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import Animated, {
   useAnimatedStyle,
   withSpring,
@@ -12,8 +18,16 @@ import {
   LibraryBig,
   MapPinned,
   Settings,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  X,
 } from 'lucide-react-native';
-import { useAppTheme } from '../components/DesignSystem';
+import { colors, useAppTheme } from '../components/DesignSystem';
+import { useQuranAudio } from '../components/QuranAudioContext';
+import { surahs } from '../data/quran';
+import { RECITER_NAME } from '../services/quranAudio';
 
 const ICONS = {
   Home: Home,
@@ -54,10 +68,94 @@ function TabButton({ route, isFocused, onPress }: any) {
   );
 }
 
+function MiniPlayer({ navigation }: any) {
+  const { palette } = useAppTheme();
+  const { current, paused, buffering, togglePause, stop, next, previous } =
+    useQuranAudio();
+  if (!current) return null;
+  const surah = surahs.find(item => item.number === current.surah);
+  const controlColor = palette.green;
+  return (
+    <View
+      style={[
+        styles.player,
+        { backgroundColor: palette.white, borderColor: palette.line },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${surah?.name} verse ${current.ayah}`}
+        onPress={() =>
+          navigation.navigate('Quran', {
+            screen: 'SurahDetail',
+            params: { surahNumber: current.surah, ayahNumber: current.ayah },
+          })
+        }
+        style={styles.playerCopy}
+      >
+        <Text
+          numberOfLines={1}
+          style={[styles.playerTitle, { color: palette.ink }]}
+        >
+          {surah?.name} · Verse {current.ayah}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={[styles.playerMeta, { color: palette.muted }]}
+        >
+          {RECITER_NAME}
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Previous verse"
+        hitSlop={8}
+        onPress={previous}
+        style={styles.playerButton}
+      >
+        <SkipBack size={18} color={controlColor} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={paused ? 'Play recitation' : 'Pause recitation'}
+        onPress={togglePause}
+        style={[styles.playerMain, { backgroundColor: palette.green }]}
+      >
+        {buffering && !paused ? (
+          <ActivityIndicator color={colors.white} size="small" />
+        ) : paused ? (
+          <Play size={17} color={colors.white} fill={colors.white} />
+        ) : (
+          <Pause size={17} color={colors.white} fill={colors.white} />
+        )}
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Next verse"
+        hitSlop={8}
+        onPress={next}
+        style={styles.playerButton}
+      >
+        <SkipForward size={18} color={controlColor} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Stop recitation"
+        hitSlop={8}
+        onPress={stop}
+        style={styles.playerButton}
+      >
+        <X size={18} color={palette.muted} />
+      </Pressable>
+    </View>
+  );
+}
+
 export default function CustomTabBar({ state, navigation }: any) {
   const { palette } = useAppTheme();
   return (
     <View style={styles.container}>
+      <MiniPlayer navigation={navigation} />
       <View
         style={[
           styles.pill,
@@ -114,6 +212,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 18,
     elevation: 8,
+  },
+  player: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 22,
+    paddingVertical: 8,
+    paddingLeft: 16,
+    paddingRight: 8,
+    marginBottom: 8,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  playerCopy: { flex: 1, marginRight: 4 },
+  playerTitle: { fontSize: 13, fontWeight: '700' },
+  playerMeta: { fontSize: 10, marginTop: 2 },
+  playerButton: { padding: 8 },
+  playerMain: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabButton: {
     alignItems: 'center',

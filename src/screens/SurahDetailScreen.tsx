@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
-  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -11,25 +9,17 @@ import {
   ViewToken,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ArrowLeft,
-  ArrowUp,
-  Bookmark,
-  Play,
-  Volume2,
-} from 'lucide-react-native';
+import { ArrowLeft, ArrowUp, Bookmark, Pause, Play } from 'lucide-react-native';
 import {
   colors,
   shared,
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
-import { Ayah, getSurahs, globalAyahNumber } from '../data/quran';
+import { Ayah, getSurahs } from '../data/quran';
 import { useAppPreferences } from '../components/AppPreferencesContext';
-import {
-  getAyahRecitationUrl,
-  getSurahRecitationUrl,
-} from '../services/quranAudio';
+import { useQuranAudio } from '../components/QuranAudioContext';
+import { RECITER_NAME } from '../services/quranAudio';
 import { sameAyah, toggleAyahBookmark } from '../services/quranReading';
 
 const LAST_READ_SAVE_DELAY_MS = 1200;
@@ -43,7 +33,9 @@ export default function SurahDetailScreen({ navigation, route }: any) {
   const surah =
     localizedSurahs.find(item => item.number === route.params?.surahNumber) ??
     localizedSurahs[0];
-  const [openingRecitation, setOpeningRecitation] = useState(false);
+  const audio = useQuranAudio();
+  const playingHere =
+    audio.current?.surah === surah.number ? audio.current.ayah : undefined;
   const [showScrollTop, setShowScrollTop] = useState(false);
   const listRef = useRef<FlatList<Ayah>>(null);
   const targetAyah: string | undefined = route.params?.ayahNumber;
@@ -90,11 +82,13 @@ export default function SurahDetailScreen({ navigation, route }: any) {
     updatePreferences({ quranLastRead: next });
   }, [updatePreferences]);
   useEffect(() => flushLastRead, [flushLastRead]);
+  const topVisibleAyah = useRef(targetAyah ?? '1');
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken<Ayah>[] }) => {
       const first = viewableItems.find(token => token.isViewable)?.item;
       if (!first) return;
       pendingLastRead.current = first.number;
+      topVisibleAyah.current = first.number;
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(
         () => flushLastReadRef.current(),
@@ -105,23 +99,24 @@ export default function SurahDetailScreen({ navigation, route }: any) {
   const flushLastReadRef = useRef(flushLastRead);
   flushLastReadRef.current = flushLastRead;
 
-  const openAudio = async (url: string) => {
-    setOpeningRecitation(true);
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert(
-        'Recitation unavailable',
-        'Could not open the Quran audio stream. Check your connection and try again.',
-      );
-    } finally {
-      setOpeningRecitation(false);
+  // Follow the recitation: highlight the verse being recited and keep it in view.
+  useEffect(() => {
+    if (!playingHere) return;
+    setHighlightedAyah(playingHere);
+    const index = surah.ayahs.findIndex(ayah => ayah.number === playingHere);
+    if (index >= 0) {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.1 });
     }
-  };
+  }, [playingHere, surah]);
 
-  const openRecitation = () => openAudio(getSurahRecitationUrl(surah.number));
+  const toggleSurahRecitation = () =>
+    playingHere
+      ? audio.togglePause()
+      : audio.play(surah.number, topVisibleAyah.current);
+  const surahPlaying = Boolean(playingHere) && !audio.paused;
 
   const renderAyah = ({ item: ayah }: { item: Ayah }) => {
+    const verseActive = playingHere === ayah.number && !audio.paused;
     const saved = bookmarks.some(item =>
       sameAyah(item, { surah: surah.number, ayah: ayah.number }),
     );
@@ -145,18 +140,23 @@ export default function SurahDetailScreen({ navigation, route }: any) {
           <View style={styles.ayahActions}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Play verse ${ayah.number}`}
-              disabled={openingRecitation}
+              accessibilityLabel={
+                verseActive
+                  ? `Pause verse ${ayah.number}`
+                  : `Play from verse ${ayah.number}`
+              }
               hitSlop={8}
               onPress={() =>
-                openAudio(
-                  getAyahRecitationUrl(
-                    globalAyahNumber(surah.number, ayah.number),
-                  ),
-                )
+                playingHere === ayah.number
+                  ? audio.togglePause()
+                  : audio.play(surah.number, ayah.number)
               }
             >
-              <Volume2 size={19} color={palette.green} />
+              {verseActive ? (
+                <Pause size={19} color={palette.green} fill={palette.green} />
+              ) : (
+                <Play size={19} color={palette.green} />
+              )}
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -196,7 +196,13 @@ export default function SurahDetailScreen({ navigation, route }: any) {
         ref={listRef}
         contentContainerStyle={shared.content}
         data={surah.ayahs}
-        extraData={[preferences.quranLanguage, bookmarks, highlightedAyah]}
+        extraData={[
+          preferences.quranLanguage,
+          bookmarks,
+          highlightedAyah,
+          playingHere,
+          audio.paused,
+        ]}
         initialNumToRender={8}
         keyExtractor={ayah => ayah.number}
         maxToRenderPerBatch={8}
@@ -239,19 +245,27 @@ export default function SurahDetailScreen({ navigation, route }: any) {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${surah.name} recitation`}
-                disabled={openingRecitation}
-                onPress={openRecitation}
+                accessibilityLabel={
+                  surahPlaying
+                    ? `Pause ${surah.name} recitation`
+                    : `Play ${surah.name} recitation`
+                }
+                onPress={toggleSurahRecitation}
                 style={[
                   styles.button,
                   theme.card,
-                  openingRecitation && styles.buttonActive,
+                  playingHere && styles.buttonActive,
                 ]}
               >
-                {openingRecitation ? (
+                {playingHere && audio.buffering && !audio.paused ? (
                   <ActivityIndicator color={colors.white} size="small" />
+                ) : surahPlaying ? (
+                  <Pause size={18} color={colors.white} fill={colors.white} />
                 ) : (
-                  <Play size={19} color={palette.green} />
+                  <Play
+                    size={19}
+                    color={playingHere ? colors.white : palette.green}
+                  />
                 )}
               </Pressable>
             </View>
@@ -261,7 +275,9 @@ export default function SurahDetailScreen({ navigation, route }: any) {
                   ? 'بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ'
                   : surah.arabicName}
               </Text>
-              <Text style={styles.playing}>Mishary Alafasy recitation</Text>
+              <Text style={styles.playing}>
+                {RECITER_NAME.toUpperCase()} RECITATION
+              </Text>
             </View>
           </>
         }
@@ -271,7 +287,11 @@ export default function SurahDetailScreen({ navigation, route }: any) {
           accessibilityRole="button"
           accessibilityLabel="Scroll to the top of the surah"
           onPress={() => listRef.current?.scrollToOffset({ offset: 0 })}
-          style={[styles.scrollTop, { backgroundColor: palette.green }]}
+          style={[
+            styles.scrollTop,
+            { backgroundColor: palette.green },
+            audio.current && styles.scrollTopAbovePlayer,
+          ]}
         >
           <ArrowUp size={20} color={colors.white} />
         </Pressable>
@@ -342,6 +362,7 @@ const styles = StyleSheet.create({
   },
   english: { color: colors.muted, fontSize: 13, lineHeight: 21 },
   rtlTranslation: { textAlign: 'right', writingDirection: 'rtl' },
+  scrollTopAbovePlayer: { bottom: 160 },
   scrollTop: {
     position: 'absolute',
     right: 20,

@@ -89,15 +89,19 @@ export const quranReadingTraditions = [
   { key: 'ibn_dhakwan', label: 'Ibn Dhakwan ‘an Ibn ‘Amir', available: false },
 ] as const;
 
+const toPersianLetters = (text: string) =>
+  text.replace(/[يى]/g, 'ی').replace(/ك/g, 'ک');
+
 const persianEdition = (quranEnglish as QuranChapterJSON[]).map(
   (chapter, chapterIndex) => ({
     ...chapter,
     verses: chapter.verses.map((verse, verseIndex) => ({
       ...verse,
-      translation:
+      translation: toPersianLetters(
         (quranPersian as PersianQuranJSON).surahs[chapterIndex]?.ayahs[
           verseIndex
         ]?.text ?? verse.translation,
+      ),
     })),
   }),
 );

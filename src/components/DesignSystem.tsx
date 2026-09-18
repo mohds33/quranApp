@@ -99,7 +99,7 @@ export function ScreenTitle({
 
 export const shared = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.cream },
-  content: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 130 },
+  content: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 200 },
   card: {
     backgroundColor: colors.white,
     borderRadius: 24,

@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Pressable,
   Alert,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -31,10 +30,10 @@ import {
   prayerNames,
 } from '../services/prayerTimes';
 import type { DailyPrayerSchedule } from '../services/prayerTimes';
-import { getAyahRecitationUrl } from '../services/quranAudio';
+import { useQuranAudio } from '../components/QuranAudioContext';
 import { useAppPreferences } from '../components/AppPreferencesContext';
 import { getHadithSampleTranslation, hadithCollections } from '../data/hadith';
-import { getSurahs, globalAyahNumber } from '../data/quran';
+import { getSurahs } from '../data/quran';
 
 const AYATUL_KURSI = { surah: '2', ayah: '255' };
 
@@ -70,7 +69,7 @@ export default function HomeScreen({ navigation }: any) {
   const theme = useThemeStyles();
   const { selectedMosque, findingClosestMosque } = useSelectedMosque();
   const { preferences } = useAppPreferences();
-  const [openingRecitation, setOpeningRecitation] = useState(false);
+  const audio = useQuranAudio();
   const [schedule, setSchedule] = useState<DailyPrayerSchedule | null>(null);
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -97,23 +96,6 @@ export default function HomeScreen({ navigation }: any) {
     });
   };
 
-  const openReadingRecitation = async () => {
-    setOpeningRecitation(true);
-    try {
-      await Linking.openURL(
-        getAyahRecitationUrl(
-          globalAyahNumber(readingTarget.surah, readingTarget.ayah),
-        ),
-      );
-    } catch {
-      Alert.alert(
-        'Recitation unavailable',
-        'Could not open the Quran audio stream. Check your connection and try again.',
-      );
-    } finally {
-      setOpeningRecitation(false);
-    }
-  };
   const nextPrayer =
     schedule && selectedMosque
       ? getNextPrayerOccurrence(schedule, selectedMosque, now)
@@ -235,10 +217,9 @@ export default function HomeScreen({ navigation }: any) {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Play ${readingSurah?.name} verse ${readingTarget.ayah}`}
-            disabled={openingRecitation}
             onPress={event => {
               event.stopPropagation();
-              openReadingRecitation();
+              audio.play(readingTarget.surah, readingTarget.ayah);
             }}
             style={styles.play}
           >

@@ -4,6 +4,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { ThemeProvider, useAppTheme } from './src/components/DesignSystem';
 import { SelectedMosqueProvider } from './src/components/SelectedMosqueContext';
 import { AppPreferencesProvider } from './src/components/AppPreferencesContext';
+import { QuranAudioProvider } from './src/components/QuranAudioContext';
 
 function ThemedApp() {
   const { isDark } = useAppTheme();
@@ -20,7 +21,9 @@ export default function App() {
     <ThemeProvider>
       <AppPreferencesProvider>
         <SelectedMosqueProvider>
-          <ThemedApp />
+          <QuranAudioProvider>
+            <ThemedApp />
+          </QuranAudioProvider>
         </SelectedMosqueProvider>
       </AppPreferencesProvider>
     </ThemeProvider>

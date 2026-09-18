@@ -28,6 +28,11 @@ jest.mock('lucide-react-native', () => {
   );
 });
 
+jest.mock('react-native-video', () => {
+  const { View } = require('react-native');
+  return { __esModule: true, default: View };
+});
+
 jest.mock('react-native-maps', () => {
   const React = require('react');
   const { View } = require('react-native');

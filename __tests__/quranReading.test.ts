@@ -1,4 +1,9 @@
-import { globalAyahNumber, surahs, totalAyahCount } from '../src/data/quran';
+import {
+  getSurahs,
+  globalAyahNumber,
+  surahs,
+  totalAyahCount,
+} from '../src/data/quran';
 import { validSavedPreferences } from '../src/components/AppPreferencesContext';
 import {
   parseAyahReference,
@@ -12,6 +17,14 @@ describe('Quran reading progress', () => {
     expect(globalAyahNumber('1', '1')).toBe(1);
     expect(globalAyahNumber('2', '255')).toBe(262);
     expect(globalAyahNumber('114', '6')).toBe(totalAyahCount);
+  });
+
+  it('uses Persian letter forms in the Farsi translation', () => {
+    const farsi = getSurahs('fa');
+    const text = farsi.flatMap(surah => surah.ayahs.map(a => a.translation));
+    expect(text).toHaveLength(totalAyahCount);
+    expect(text.some(line => /[يىك]/.test(line))).toBe(false);
+    expect(farsi[1].ayahs[254].translation).toContain('کرسی');
   });
 
   it('parses verse references that exist', () => {
