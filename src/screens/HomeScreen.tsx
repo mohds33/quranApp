@@ -109,7 +109,7 @@ export default function HomeScreen({ navigation }: any) {
           schedule,
           selectedMosque,
           now,
-          undefined,
+          preferences.calculationMethod,
           cityTimeZone,
         )
       : null;

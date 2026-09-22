@@ -4,7 +4,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
@@ -21,20 +20,17 @@ import {
   colors,
   ScreenTitle,
   shared,
+  Toggle,
   useAppTheme,
   useThemeStyles,
 } from '../components/DesignSystem';
 import { useAppPreferences } from '../components/AppPreferencesContext';
 import { quranLanguageOptions } from '../data/quran';
+import { calculationMethodOptions } from '../services/prayerTimes';
+import { requestNotificationPermission } from '../services/prayerNotifications';
 import LocationPickerModal from '../components/LocationPickerModal';
 
 type SettingKey = 'location' | 'method' | 'translation';
-const options: Record<'method', { title: string; values: string[] }> = {
-  method: {
-    title: 'Prayer calculation',
-    values: ['ISNA', 'Muslim World League', 'Umm al-Qura'],
-  },
-};
 
 export default function SettingsScreen() {
   const { isDark, setDarkMode, palette } = useAppTheme();
@@ -52,8 +48,24 @@ export default function SettingsScreen() {
     quranLanguageOptions.find(
       option => option.code === preferences.quranLanguage,
     ) ?? quranLanguageOptions[0];
-  const [settings, setSettings] = useState({ method: 'ISNA' });
-  const [notifications, setNotifications] = useState(true);
+  const setNotifications = async (enabled: boolean) => {
+    if (!enabled) {
+      updatePreferences({ prayerNotifications: false });
+      return;
+    }
+    if (await requestNotificationPermission()) {
+      updatePreferences({ prayerNotifications: true });
+      return;
+    }
+    Alert.alert(
+      'Notifications are off',
+      'Allow notifications for Sakinah in the Settings app to be reminded at each prayer time.',
+    );
+  };
+  const activeMethod =
+    calculationMethodOptions.find(
+      option => option.key === preferences.calculationMethod,
+    ) ?? calculationMethodOptions[0];
   const rows = [
     { Icon: MapPin, key: 'location' as const, title: 'Location' },
     {
@@ -76,11 +88,12 @@ export default function SettingsScreen() {
           })),
           { text: 'Cancel', style: 'cancel' as const },
         ])
-      : Alert.alert(options[key].title, undefined, [
-          ...options[key].values.map(value => ({
-            text: `${settings[key] === value ? '✓ ' : ''}${value}`,
-            onPress: () =>
-              setSettings(current => ({ ...current, [key]: value })),
+      : Alert.alert('Prayer calculation', undefined, [
+          ...calculationMethodOptions.map(option => ({
+            text: `${preferences.calculationMethod === option.key ? '✓ ' : ''}${
+              option.label
+            }`,
+            onPress: () => updatePreferences({ calculationMethod: option.key }),
           })),
           { text: 'Cancel', style: 'cancel' as const },
         ]);
@@ -109,7 +122,7 @@ export default function SettingsScreen() {
                     ? `${activeLanguage.label} · ${activeLanguage.translator}`
                     : key === 'location'
                     ? locationLabel
-                    : settings[key]}
+                    : activeMethod.label}
                 </Text>
               </View>
               <ChevronRight size={18} color={palette.muted} />
@@ -125,11 +138,10 @@ export default function SettingsScreen() {
             <Text style={[styles.title, styles.copy, theme.text]}>
               Prayer notifications
             </Text>
-            <Switch
+            <Toggle
               accessibilityLabel="Prayer notifications"
-              value={notifications}
+              value={preferences.prayerNotifications}
               onValueChange={setNotifications}
-              trackColor={{ true: palette.green, false: palette.line }}
             />
           </View>
           <View style={[styles.row, theme.border]}>
@@ -139,11 +151,10 @@ export default function SettingsScreen() {
             <Text style={[styles.title, styles.copy, theme.text]}>
               Dark appearance
             </Text>
-            <Switch
+            <Toggle
               accessibilityLabel="Dark appearance"
               value={isDark}
               onValueChange={setDarkMode}
-              trackColor={{ true: palette.green, false: palette.line }}
             />
           </View>
         </View>

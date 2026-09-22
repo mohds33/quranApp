@@ -53,7 +53,7 @@ const PAGE_SIZE = 20;
 export default function HadithBookScreen({ navigation, route }: any) {
   const { palette, isDark } = useAppTheme();
   const theme = useThemeStyles();
-  const { preferences } = useAppPreferences();
+  const { preferences, updatePreferences } = useAppPreferences();
   const activeLanguage =
     quranLanguageOptions.find(
       option => option.code === preferences.quranLanguage,
@@ -70,7 +70,6 @@ export default function HadithBookScreen({ navigation, route }: any) {
   const deferredQuery = useDeferredValue(query);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [saved, setSaved] = useState<string[]>([]);
 
   useEffect(() => {
     if (!source) {
@@ -133,12 +132,15 @@ export default function HadithBookScreen({ navigation, route }: any) {
     [filteredHadiths, visibleCount],
   );
 
+  // Bookmarks are stored as "<book>:<hadith number>" so they survive restarts.
+  const savedKey = (number: string) => `${book.id}:${number}`;
+  const saved = preferences.savedHadiths;
   const toggleSaved = (number: string) =>
-    setSaved(items =>
-      items.includes(number)
-        ? items.filter(item => item !== number)
-        : [...items, number],
-    );
+    updatePreferences({
+      savedHadiths: saved.includes(savedKey(number))
+        ? saved.filter(item => item !== savedKey(number))
+        : [...saved, savedKey(number)],
+    });
   const shareHadith = (translation: string, number: string) =>
     Share.share({ message: `${translation}\n\n${book.title} · ${number}` });
   const loadMore = useCallback(() => {
@@ -183,7 +185,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
 
   const renderFullHadith = ({ item }: { item: FullHadith }) => {
     const number = String(item.idInBook);
-    const isSaved = saved.includes(number);
+    const isSaved = saved.includes(savedKey(number));
     const chapter = chapterMap.get(item.chapterId);
     return (
       <View style={[styles.hadith, theme.card]}>
@@ -294,7 +296,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
             <SampleHadithCard
               bookTitle={book.title}
               hadith={hadith}
-              isSaved={saved.includes(hadith.number)}
+              isSaved={saved.includes(savedKey(hadith.number))}
               key={hadith.number}
               onSave={() => toggleSaved(hadith.number)}
               onShare={() =>

@@ -3,6 +3,7 @@
 #import <CoreLocation/CoreLocation.h>
 #import <MapKit/MapKit.h>
 #import <PDFKit/PDFKit.h>
+#import <UserNotifications/UserNotifications.h>
 #import <WebKit/WebKit.h>
 
 static NSString *RCTJSONString(id value)
@@ -684,6 +685,95 @@ didFailProvisionalNavigation:(WKNavigation *)navigation
 {
   NSString *payload = [[NSUserDefaults standardUserDefaults] stringForKey:RCTAppPreferencesKey];
   resolve(payload ?: @"");
+}
+
+static NSString *const RCTPrayerNotificationPrefix = @"prayer-";
+
+- (void)requestNotificationPermission:(RCTPromiseResolveBlock)resolve
+                               reject:(RCTPromiseRejectBlock)reject
+{
+  UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+  [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound)
+                        completionHandler:^(BOOL granted, NSError *error) {
+    if (error != nil) {
+      reject(@"notification_permission_failed", error.localizedDescription, error);
+      return;
+    }
+    resolve(granted ? @"granted" : @"denied");
+  }];
+}
+
+- (void)cancelPrayerNotifications:(RCTPromiseResolveBlock)resolve
+                           reject:(RCTPromiseRejectBlock)reject
+{
+  UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+  [center getPendingNotificationRequestsWithCompletionHandler:^(NSArray<UNNotificationRequest *> *requests) {
+    NSMutableArray<NSString *> *identifiers = [NSMutableArray array];
+    for (UNNotificationRequest *request in requests) {
+      if ([request.identifier hasPrefix:RCTPrayerNotificationPrefix]) {
+        [identifiers addObject:request.identifier];
+      }
+    }
+    [center removePendingNotificationRequestsWithIdentifiers:identifiers];
+    resolve(@YES);
+  }];
+}
+
+- (void)schedulePrayerNotifications:(NSString *)payloadJson
+                            resolve:(RCTPromiseResolveBlock)resolve
+                             reject:(RCTPromiseRejectBlock)reject
+{
+  NSData *payloadData = [payloadJson dataUsingEncoding:NSUTF8StringEncoding];
+  NSArray *entries = [NSJSONSerialization JSONObjectWithData:payloadData options:0 error:nil];
+  if (![entries isKindOfClass:[NSArray class]]) {
+    reject(@"notifications_invalid", @"The prayer notification list was invalid.", nil);
+    return;
+  }
+
+  NSISO8601DateFormatter *formatter = [[NSISO8601DateFormatter alloc] init];
+  // JavaScript's toISOString() includes milliseconds, which the default
+  // options do not parse.
+  formatter.formatOptions =
+      NSISO8601DateFormatWithInternetDateTime | NSISO8601DateFormatWithFractionalSeconds;
+  NSCalendar *calendar = [NSCalendar currentCalendar];
+  UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+
+  [center getPendingNotificationRequestsWithCompletionHandler:^(NSArray<UNNotificationRequest *> *requests) {
+    NSMutableArray<NSString *> *stale = [NSMutableArray array];
+    for (UNNotificationRequest *request in requests) {
+      if ([request.identifier hasPrefix:RCTPrayerNotificationPrefix]) {
+        [stale addObject:request.identifier];
+      }
+    }
+    [center removePendingNotificationRequestsWithIdentifiers:stale];
+
+    __block NSInteger scheduled = 0;
+    // iOS keeps at most 64 pending local notifications per app.
+    for (NSDictionary *entry in entries) {
+      if (scheduled >= 60 || ![entry isKindOfClass:[NSDictionary class]]) break;
+      NSString *identifier = [NSString stringWithFormat:@"%@%@", RCTPrayerNotificationPrefix, entry[@"id"]];
+      NSDate *fireDate = [formatter dateFromString:entry[@"date"]];
+      if (fireDate == nil || [fireDate timeIntervalSinceNow] < 60) continue;
+
+      UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
+      content.title = entry[@"title"] ?: @"Prayer time";
+      content.body = entry[@"body"] ?: @"";
+      content.sound = [UNNotificationSound defaultSound];
+
+      NSDateComponents *components =
+          [calendar components:(NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay |
+                                NSCalendarUnitHour | NSCalendarUnitMinute)
+                      fromDate:fireDate];
+      UNCalendarNotificationTrigger *trigger =
+          [UNCalendarNotificationTrigger triggerWithDateMatchingComponents:components repeats:NO];
+      UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:identifier
+                                                                           content:content
+                                                                           trigger:trigger];
+      [center addNotificationRequest:request withCompletionHandler:nil];
+      scheduled += 1;
+    }
+    resolve(@(scheduled));
+  }];
 }
 
 - (void)saveAppPreferences:(NSString *)payloadJson

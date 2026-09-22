@@ -33,6 +33,7 @@ import {
 import { PrayerLog, validPrayerLogs } from '../services/prayerTracking';
 
 export type LocationMode = 'device' | 'custom';
+export type AppearanceMode = 'system' | 'light' | 'dark';
 export type PrayerTimeSource = 'closestMosque' | 'calculated';
 export type QuranReadingKey = 'hafs';
 
@@ -43,6 +44,8 @@ export type SavedHomeMosqueSchedule = {
 };
 
 export type AppPreferences = {
+  appearance: AppearanceMode;
+  prayerNotifications: boolean;
   locationMode: LocationMode;
   customLocation: ResolvedLocation | null;
   prayerTimeSource: PrayerTimeSource;
@@ -52,12 +55,16 @@ export type AppPreferences = {
   quranLastRead: AyahReference | null;
   quranBookmarks: AyahReference[];
   savedDuas: string[];
+  savedHadithBooks: string[];
+  savedHadiths: string[];
   homeMosque: Mosque | null;
   homeMosqueSchedule: SavedHomeMosqueSchedule | null;
   prayerLogs: PrayerLog[];
 };
 
 const defaultPreferences: AppPreferences = {
+  appearance: 'system',
+  prayerNotifications: false,
   locationMode: 'device',
   customLocation: null,
   prayerTimeSource: 'closestMosque',
@@ -67,6 +74,8 @@ const defaultPreferences: AppPreferences = {
   quranLastRead: null,
   quranBookmarks: [],
   savedDuas: [],
+  savedHadithBooks: [],
+  savedHadiths: [],
   homeMosque: null,
   homeMosqueSchedule: null,
   prayerLogs: [],
@@ -177,6 +186,19 @@ function validSavedPublishedSchedule(
   };
 }
 
+/** Keeps saved ids that still look like ids, without duplicates. */
+function validSavedKeys(value: unknown, pattern: RegExp, limit = 500) {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set<string>(
+      value.filter(
+        (key: unknown): key is string =>
+          typeof key === 'string' && pattern.test(key),
+      ),
+    ),
+  ].slice(-limit);
+}
+
 export function validSavedPreferences(value: any): Partial<AppPreferences> {
   if (!value || typeof value !== 'object') return {};
   const savedLanguage = quranLanguageOptions.some(
@@ -200,6 +222,11 @@ export function validSavedPreferences(value: any): Partial<AppPreferences> {
         }
       : null;
   return {
+    appearance:
+      value.appearance === 'light' || value.appearance === 'dark'
+        ? value.appearance
+        : 'system',
+    prayerNotifications: value.prayerNotifications === true,
     locationMode: value.locationMode === 'custom' ? 'custom' : 'device',
     customLocation:
       Number.isFinite(value.customLocation?.latitude) &&
@@ -220,16 +247,15 @@ export function validSavedPreferences(value: any): Partial<AppPreferences> {
     quranReading: 'hafs',
     quranLastRead: validAyahReference(value.quranLastRead, surahs),
     quranBookmarks: validAyahBookmarks(value.quranBookmarks, surahs),
-    savedDuas: Array.isArray(value.savedDuas)
-      ? [
-          ...new Set<string>(
-            value.savedDuas.filter(
-              (key: unknown): key is string =>
-                typeof key === 'string' && /^(h\d+|q\d+:\d+)$/.test(key),
-            ),
-          ),
-        ].slice(-500)
-      : [],
+    savedDuas: validSavedKeys(value.savedDuas, /^(h\d+|q\d+:\d+)$/),
+    savedHadithBooks: validSavedKeys(
+      value.savedHadithBooks,
+      /^[a-z0-9]{2,20}$/,
+    ),
+    savedHadiths: validSavedKeys(
+      value.savedHadiths,
+      /^[a-z0-9]{2,20}:\d{1,6}$/,
+    ),
     homeMosque,
     homeMosqueSchedule,
     prayerLogs: validPrayerLogs(value.prayerLogs),

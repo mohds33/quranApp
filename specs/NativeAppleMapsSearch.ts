@@ -20,6 +20,10 @@ export interface Spec extends TurboModule {
   extractRenderedWebsiteHTML(url: string): Promise<string>;
   readMosqueSearchCache(): Promise<string>;
   saveMosqueSearchCache(payloadJson: string): Promise<boolean>;
+  requestNotificationPermission(): Promise<string>;
+  /** payloadJson: [{ id, title, body, date }] with ISO dates. Returns the count scheduled. */
+  schedulePrayerNotifications(payloadJson: string): Promise<number>;
+  cancelPrayerNotifications(): Promise<boolean>;
   readAppPreferences(): Promise<string>;
   saveAppPreferences(payloadJson: string): Promise<boolean>;
 }

@@ -23,6 +23,7 @@ import {
   useThemeStyles,
 } from '../components/DesignSystem';
 import { HadithCategory, hadithCollections } from '../data/hadith';
+import { useAppPreferences } from '../components/AppPreferencesContext';
 
 const filters: Array<'All' | HadithCategory> = [
   'All',
@@ -37,7 +38,8 @@ export default function HadithLibraryScreen({ navigation }: any) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<(typeof filters)[number]>('All');
   const [savedOnly, setSavedOnly] = useState(false);
-  const [savedBooks, setSavedBooks] = useState<string[]>(['bukhari', 'riyad']);
+  const { preferences, updatePreferences } = useAppPreferences();
+  const savedBooks = preferences.savedHadithBooks;
 
   const results = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -57,9 +59,11 @@ export default function HadithLibraryScreen({ navigation }: any) {
   }, [filter, query, savedBooks, savedOnly]);
 
   const toggleSaved = (id: string) =>
-    setSavedBooks(items =>
-      items.includes(id) ? items.filter(item => item !== id) : [...items, id],
-    );
+    updatePreferences({
+      savedHadithBooks: savedBooks.includes(id)
+        ? savedBooks.filter(item => item !== id)
+        : [...savedBooks, id],
+    });
 
   return (
     <SafeAreaView style={[shared.screen, theme.screen]} edges={['top']}>

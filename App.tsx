@@ -5,6 +5,7 @@ import { ThemeProvider, useAppTheme } from './src/components/DesignSystem';
 import { SelectedMosqueProvider } from './src/components/SelectedMosqueContext';
 import { AppPreferencesProvider } from './src/components/AppPreferencesContext';
 import { QuranAudioProvider } from './src/components/QuranAudioContext';
+import PrayerNotificationScheduler from './src/components/PrayerNotificationScheduler';
 
 function ThemedApp() {
   const { isDark } = useAppTheme();
@@ -18,14 +19,15 @@ function ThemedApp() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AppPreferencesProvider>
+    <AppPreferencesProvider>
+      <ThemeProvider>
         <SelectedMosqueProvider>
           <QuranAudioProvider>
+            <PrayerNotificationScheduler />
             <ThemedApp />
           </QuranAudioProvider>
         </SelectedMosqueProvider>
-      </AppPreferencesProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </AppPreferencesProvider>
   );
 }

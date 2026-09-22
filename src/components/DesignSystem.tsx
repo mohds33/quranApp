@@ -1,5 +1,12 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
-import { Appearance, StyleSheet, Text, View } from 'react-native';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { Appearance, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useAppPreferences } from './AppPreferencesContext';
 
 export const lightColors = {
   ink: '#17332E',
@@ -39,17 +46,85 @@ const ThemeContext = createContext<ThemeContextValue>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [isDark, setDarkMode] = useState(
+  const { preferences, updatePreferences } = useAppPreferences();
+  const [systemDark, setSystemDark] = useState(
     Appearance.getColorScheme() === 'dark',
   );
+  // Follow the phone until the reader picks an appearance themselves.
+  useEffect(() => {
+    const listener = Appearance.addChangeListener(({ colorScheme }) =>
+      setSystemDark(colorScheme === 'dark'),
+    );
+    return () => listener.remove();
+  }, []);
+  const isDark =
+    preferences.appearance === 'system'
+      ? systemDark
+      : preferences.appearance === 'dark';
   const value = useMemo(
-    () => ({ isDark, setDarkMode, palette: isDark ? darkColors : lightColors }),
-    [isDark],
+    () => ({
+      isDark,
+      setDarkMode: (dark: boolean) =>
+        updatePreferences({ appearance: dark ? 'dark' : 'light' }),
+      palette: isDark ? darkColors : lightColors,
+    }),
+    [isDark, updatePreferences],
   );
   return (
     <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
 }
+
+export function Toggle({
+  value,
+  onValueChange,
+  accessibilityLabel,
+}: {
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  accessibilityLabel: string;
+}) {
+  const { palette } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ checked: value }}
+      hitSlop={10}
+      onPress={() => onValueChange(!value)}
+      style={[
+        toggleStyles.track,
+        value ? toggleStyles.trackOn : toggleStyles.trackOff,
+        { backgroundColor: value ? palette.green : palette.line },
+      ]}
+    >
+      <View style={toggleStyles.thumb} />
+    </Pressable>
+  );
+}
+
+const toggleStyles = StyleSheet.create({
+  track: {
+    width: 52,
+    height: 32,
+    borderRadius: 16,
+    padding: 3,
+    justifyContent: 'center',
+  },
+  trackOn: { alignItems: 'flex-end' },
+  trackOff: { alignItems: 'flex-start' },
+  thumb: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+});
 
 export function useAppTheme() {
   return useContext(ThemeContext);
