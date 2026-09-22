@@ -406,6 +406,9 @@ export default function PrayerTimesScreen({ navigation }: any) {
             </Pressable>
           )}
         </View>
+        <Text style={[styles.logHint, theme.mutedText]}>
+          Tap a prayer to log it on time, twice for delayed, or hold to clear.
+        </Text>
 
         <Pressable
           accessibilityLabel="Open full prayer tracking history"
@@ -650,6 +653,13 @@ const styles = StyleSheet.create({
   },
   jummahNumber: { fontSize: 10, fontWeight: '900' },
   jummahTime: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  logHint: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 10,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
   historyCard: { padding: 17, marginTop: 14 },
   historyHeader: {
     flexDirection: 'row',
