@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, ArrowUp, Bookmark, Pause, Play } from 'lucide-react-native';
 import {
+  arabicType,
   colors,
   shared,
   useAppTheme,
@@ -326,10 +327,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   bismillahArabic: {
+    ...arabicType.ayah,
     color: colors.white,
-    fontSize: 22,
     textAlign: 'center',
-    lineHeight: 36,
   },
   playing: {
     color: colors.gold,
@@ -359,13 +359,10 @@ const styles = StyleSheet.create({
   },
   numberText: { color: colors.green, fontWeight: '700' },
   arabic: {
+    ...arabicType.ayah,
     color: colors.ink,
-    fontSize: 21,
-    lineHeight: 37,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-    marginTop: 10,
-    marginBottom: 8,
+    marginTop: 12,
+    marginBottom: 10,
   },
   english: { color: colors.muted, fontSize: 13, lineHeight: 20 },
   rtlTranslation: { textAlign: 'right', writingDirection: 'rtl' },

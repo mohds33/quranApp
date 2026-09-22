@@ -1,0 +1,21 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "assets/fonts/Amiri-Bold.ttf",
+      "sha1": "eb84bdc491cdb1a8d6b3d4a1fba9508759789836"
+    },
+    {
+      "path": "assets/fonts/Amiri-Regular.ttf",
+      "sha1": "a5f4fe8279d587ca8e65b01159c405788850c6d3"
+    },
+    {
+      "path": "assets/fonts/AmiriQuran-Regular.ttf",
+      "sha1": "7fa35fe59f613abedf6c332fe80cb31198b3741e"
+    },
+    {
+      "path": "assets/fonts/OFL.txt",
+      "sha1": "b7b61322eb934f651becd1cc03e78ac956d40174"
+    }
+  ]
+}

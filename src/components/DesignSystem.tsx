@@ -75,6 +75,43 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Arabic is set in Amiri, a Naskh face designed for this script; Quranic text
+ * uses Amiri Quran, which is drawn for the Uthmani marks. The system Arabic
+ * font crowds the vowel marks and reads as a UI font. Amiri runs small for its
+ * point size and stacks marks above and below, so Arabic wants a larger size
+ * and roughly double line height. PostScript names resolve on both platforms.
+ */
+export const arabicType = StyleSheet.create({
+  /** Quran verses, in the mushaf face. */
+  ayah: {
+    fontFamily: 'AmiriQuran-Regular',
+    fontSize: 24,
+    lineHeight: 52,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  /** Duas, hadith and other Arabic passages. */
+  body: {
+    fontFamily: 'Amiri-Regular',
+    fontSize: 22,
+    lineHeight: 42,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  /** Surah and chapter names shown beside Latin text. */
+  title: {
+    fontFamily: 'Amiri-Regular',
+    fontSize: 21,
+    writingDirection: 'rtl',
+  },
+  titleBold: {
+    fontFamily: 'Amiri-Bold',
+    fontSize: 21,
+    writingDirection: 'rtl',
+  },
+});
+
 export function Toggle({
   value,
   onValueChange,

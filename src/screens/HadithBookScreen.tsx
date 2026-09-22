@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react-native';
 import {
+  arabicType,
   colors,
   shared,
   useAppTheme,
@@ -592,7 +593,12 @@ const styles = StyleSheet.create({
     padding: 26,
     alignItems: 'center',
   },
-  arabicTitle: { color: colors.white, fontSize: 29, lineHeight: 44 },
+  arabicTitle: {
+    ...arabicType.title,
+    color: colors.white,
+    fontSize: 28,
+    lineHeight: 48,
+  },
   coverTitle: {
     color: colors.white,
     fontSize: 20,
@@ -765,11 +771,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   arabic: {
+    ...arabicType.body,
     color: colors.ink,
     fontSize: 24,
-    lineHeight: 43,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    lineHeight: 48,
     marginTop: 17,
     marginBottom: 15,
   },
@@ -788,8 +793,9 @@ const styles = StyleSheet.create({
   },
   narrator: { color: colors.muted, fontSize: 10, marginTop: 12 },
   chapterArabic: {
+    ...arabicType.title,
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 15,
     textAlign: 'right',
     marginTop: 13,
   },

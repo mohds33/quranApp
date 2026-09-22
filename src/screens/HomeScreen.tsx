@@ -16,11 +16,12 @@ import {
   Play,
 } from 'lucide-react-native';
 import {
+  arabicType,
   colors,
-  Eyebrow,
   shared,
   useAppTheme,
   useThemeStyles,
+  Eyebrow,
 } from '../components/DesignSystem';
 import { useSelectedMosque } from '../components/SelectedMosqueContext';
 import {
@@ -413,11 +414,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   arabic: {
+    ...arabicType.body,
     color: colors.ink,
-    fontSize: 25,
-    textAlign: 'right',
-    marginVertical: 17,
-    lineHeight: 41,
+    marginVertical: 16,
   },
   translation: { color: colors.ink, fontSize: 14, lineHeight: 21 },
   verseFoot: {

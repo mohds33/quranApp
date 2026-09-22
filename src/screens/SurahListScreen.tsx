@@ -10,11 +10,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Bookmark, ChevronRight, X } from 'lucide-react-native';
 import {
+  arabicType,
   colors,
-  ScreenTitle,
   shared,
   useAppTheme,
   useThemeStyles,
+  ScreenTitle,
 } from '../components/DesignSystem';
 import { totalAyahCount } from '../data/quran';
 import { getSurahs, quranLanguageOptions } from '../data/quran';
@@ -311,7 +312,7 @@ const styles = StyleSheet.create({
   copy: { flex: 1 },
   name: { color: colors.ink, fontSize: 15, fontWeight: '700' },
   meta: { color: colors.muted, fontSize: 10, marginTop: 4 },
-  arabic: { color: colors.ink, fontSize: 18 },
+  arabic: { ...arabicType.title, color: colors.ink },
   verseList: { marginBottom: 25 },
   verseRow: {
     paddingHorizontal: 16,

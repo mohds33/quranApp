@@ -16,11 +16,12 @@ import {
   X,
 } from 'lucide-react-native';
 import {
+  arabicType,
   colors,
-  ScreenTitle,
   shared,
   useAppTheme,
   useThemeStyles,
+  ScreenTitle,
 } from '../components/DesignSystem';
 import { HadithCategory, hadithCollections } from '../data/hadith';
 import { useAppPreferences } from '../components/AppPreferencesContext';
@@ -261,7 +262,7 @@ const styles = StyleSheet.create({
   heroCopy: { flex: 1, marginLeft: 12 },
   heroTitle: { color: colors.white, fontSize: 17, fontWeight: '700' },
   heroText: { color: '#BCD3CB', fontSize: 11, marginTop: 4 },
-  heroArabic: { color: colors.white, fontSize: 23 },
+  heroArabic: { ...arabicType.title, color: colors.white, fontSize: 24 },
   search: {
     ...shared.card,
     flexDirection: 'row',
@@ -337,14 +338,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     textTransform: 'uppercase',
   },
-  arabic: {
-    color: colors.ink,
-    fontSize: 21,
-    lineHeight: 34,
-    marginTop: 13,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+  arabic: { ...arabicType.title, color: colors.ink, marginTop: 13 },
   actions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   empty: { color: colors.muted, padding: 28, textAlign: 'center' },
 });

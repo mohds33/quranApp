@@ -12,11 +12,12 @@ import {
   PersonStanding,
 } from 'lucide-react-native';
 import {
+  arabicType,
   colors,
-  ScreenTitle,
   shared,
   useAppTheme,
   useThemeStyles,
+  ScreenTitle,
 } from '../components/DesignSystem';
 import { useAppPreferences } from '../components/AppPreferencesContext';
 import {
@@ -286,15 +287,15 @@ const styles = StyleSheet.create({
   stepCopy: { flex: 1, marginLeft: 12 },
   stepIndex: { fontSize: 8, fontWeight: '900' },
   stepTitle: { fontSize: 14, fontWeight: '800', marginTop: 3 },
-  stepArabicTitle: { fontSize: 12, marginTop: 3, textAlign: 'left' },
+  stepArabicTitle: {
+    ...arabicType.title,
+    fontSize: 15,
+    marginTop: 3,
+    textAlign: 'left',
+  },
   chevronExpanded: { transform: [{ rotate: '180deg' }] },
   detail: { borderTopWidth: 1, padding: 17 },
-  arabic: {
-    fontSize: 23,
-    lineHeight: 42,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+  arabic: { ...arabicType.body },
   transliteration: { fontSize: 12, lineHeight: 20, marginTop: 14 },
   meaning: { borderRadius: 8, padding: 14, marginTop: 14 },
   meaningLabel: { fontSize: 8, fontWeight: '900', marginBottom: 7 },

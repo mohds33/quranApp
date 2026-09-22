@@ -16,6 +16,10 @@
 		A7A000032CA45674006654EE /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A7A000042CA45674006654EE /* MapKit.framework */; };
 		A7A000062CA45674006654EE /* PDFKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A7A000072CA45674006654EE /* PDFKit.framework */; };
 		A7A000082CA45674006654EE /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A7A000092CA45674006654EE /* WebKit.framework */; };
+		A46556B7EE46402888355608 /* Amiri-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DABDED541F7F4B2B8068FF63 /* Amiri-Bold.ttf */; };
+		E5CEE92A096945299B47912C /* Amiri-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 56773F84A26D4B6AB0493141 /* Amiri-Regular.ttf */; };
+		2B5B7AC44DC74422BD4125BB /* AmiriQuran-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1868333E9DA64B7B8262F85C /* AmiriQuran-Regular.ttf */; };
+		C9DFE800C04A4FF9BBA00DE8 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 303957088DBD48029AAF262F /* OFL.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +38,10 @@
 		A7A000072CA45674006654EE /* PDFKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PDFKit.framework; path = System/Library/Frameworks/PDFKit.framework; sourceTree = SDKROOT; };
 		A7A000092CA45674006654EE /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		DABDED541F7F4B2B8068FF63 /* Amiri-Bold.ttf */ = {isa = PBXFileReference; name = "Amiri-Bold.ttf"; path = "../assets/fonts/Amiri-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		56773F84A26D4B6AB0493141 /* Amiri-Regular.ttf */ = {isa = PBXFileReference; name = "Amiri-Regular.ttf"; path = "../assets/fonts/Amiri-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		1868333E9DA64B7B8262F85C /* AmiriQuran-Regular.ttf */ = {isa = PBXFileReference; name = "AmiriQuran-Regular.ttf"; path = "../assets/fonts/AmiriQuran-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		303957088DBD48029AAF262F /* OFL.txt */ = {isa = PBXFileReference; name = "OFL.txt"; path = "../assets/fonts/OFL.txt"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +100,7 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				13DF1DDD78C5494C981364A1 /* Resources */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -114,6 +123,18 @@
 			);
 			path = Pods;
 			sourceTree = "<group>";
+		};
+		13DF1DDD78C5494C981364A1 /* Resources */ = {
+			isa = "PBXGroup";
+			children = (
+				DABDED541F7F4B2B8068FF63 /* Amiri-Bold.ttf */,
+				56773F84A26D4B6AB0493141 /* Amiri-Regular.ttf */,
+				1868333E9DA64B7B8262F85C /* AmiriQuran-Regular.ttf */,
+				303957088DBD48029AAF262F /* OFL.txt */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+			path = "";
 		};
 /* End PBXGroup section */
 
@@ -178,6 +199,10 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				9B95538864AF4C522CB34FE3 /* PrivacyInfo.xcprivacy in Resources */,
+				A46556B7EE46402888355608 /* Amiri-Bold.ttf in Resources */,
+				E5CEE92A096945299B47912C /* Amiri-Regular.ttf in Resources */,
+				2B5B7AC44DC74422BD4125BB /* AmiriQuran-Regular.ttf in Resources */,
+				C9DFE800C04A4FF9BBA00DE8 /* OFL.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

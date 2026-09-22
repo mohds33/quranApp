@@ -30,11 +30,12 @@ import {
   X,
 } from 'lucide-react-native';
 import {
+  arabicType,
   colors,
-  ScreenTitle,
   shared,
   useAppTheme,
   useThemeStyles,
+  ScreenTitle,
 } from '../components/DesignSystem';
 import { useAppPreferences } from '../components/AppPreferencesContext';
 import { useQuranAudio } from '../components/QuranAudioContext';
@@ -94,7 +95,16 @@ function DuaCard({
   return (
     <View style={[styles.dua, theme.card]}>
       {dua.arabic ? (
-        <Text style={[styles.duaArabic, theme.text]}>{dua.arabic}</Text>
+        <Text
+          style={[
+            styles.duaArabic,
+            // Quranic duas carry the Uthmani marks the mushaf face draws.
+            dua.key.startsWith('q') && styles.duaArabicQuran,
+            theme.text,
+          ]}
+        >
+          {dua.arabic}
+        </Text>
       ) : null}
       {dua.transliteration ? (
         <Text style={[styles.transliteration, { color: palette.green }]}>
@@ -496,11 +506,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   featureArabic: {
+    ...arabicType.ayah,
     color: colors.white,
-    fontSize: 21,
-    lineHeight: 36,
-    textAlign: 'right',
-    writingDirection: 'rtl',
     marginTop: 14,
   },
   featureTranslation: {
@@ -562,10 +569,9 @@ const styles = StyleSheet.create({
   rowTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   rowMeta: { color: colors.muted, fontSize: 11, marginTop: 3 },
   chapterArabic: {
+    ...arabicType.title,
     color: colors.ink,
-    fontSize: 18,
     textAlign: 'right',
-    writingDirection: 'rtl',
     marginBottom: 4,
   },
   note: { color: colors.muted, fontSize: 11, marginBottom: 12 },
@@ -575,13 +581,8 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     marginBottom: 10,
   },
-  duaArabic: {
-    color: colors.ink,
-    fontSize: 20,
-    lineHeight: 35,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+  duaArabic: { ...arabicType.body, color: colors.ink },
+  duaArabicQuran: arabicType.ayah,
   transliteration: {
     fontSize: 12,
     lineHeight: 18,
