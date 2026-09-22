@@ -676,7 +676,9 @@ didFailProvisionalNavigation:(WKNavigation *)navigation
     reject(@"mosque_cache_too_large", @"The saved mosque search is too large.", nil);
     return;
   }
-  [[NSUserDefaults standardUserDefaults] setObject:payloadJson forKey:RCTMosqueSearchCacheKey];
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setObject:payloadJson forKey:RCTMosqueSearchCacheKey];
+  [defaults synchronize];
   resolve(@YES);
 }
 
@@ -785,7 +787,11 @@ static NSString *const RCTPrayerNotificationPrefix = @"prayer-";
     reject(@"preferences_too_large", @"The app preferences are too large.", nil);
     return;
   }
-  [[NSUserDefaults standardUserDefaults] setObject:payloadJson forKey:RCTAppPreferencesKey];
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setObject:payloadJson forKey:RCTAppPreferencesKey];
+  // Flush now: a change made just before the app is force-quit would
+  // otherwise be lost.
+  [defaults synchronize];
   resolve(@YES);
 }
 
