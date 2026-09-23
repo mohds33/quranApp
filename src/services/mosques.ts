@@ -122,6 +122,17 @@ const fallbackMosques = [
   },
 ];
 
+/**
+ * How far a masjid is from the reader. A masjid's own distanceKm is measured
+ * from wherever the map was searched, which is not where the reader is.
+ */
+export function distanceFromReader(
+  reader: Coordinates | null | undefined,
+  mosque: Mosque,
+) {
+  return reader ? distanceKm(reader, mosque) : mosque.distanceKm;
+}
+
 export function distanceKm(from: Coordinates, to: Coordinates) {
   const radius = 6371;
   const degrees = (value: number) => (value * Math.PI) / 180;
@@ -421,7 +432,10 @@ export async function fetchNearbyMosques(
   const results = responses.flatMap(response =>
     response.status === 'fulfilled' ? response.value : [],
   );
-  if (!results.length && responses.every(response => response.status === 'rejected')) {
+  if (
+    !results.length &&
+    responses.every(response => response.status === 'rejected')
+  ) {
     throw new Error('Mosque search is temporarily unavailable.');
   }
   return mergeMosqueResults(results, origin);

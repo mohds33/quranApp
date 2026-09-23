@@ -29,6 +29,7 @@ import {
 } from '../components/DesignSystem';
 import { useSelectedMosque } from '../components/SelectedMosqueContext';
 import { useAppPreferences } from '../components/AppPreferencesContext';
+import { distanceFromReader } from '../services/mosques';
 import {
   findOfficialMosqueWebsite,
   fetchPublishedMosquePrayerSchedule,
@@ -40,7 +41,7 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
   const { palette } = useAppTheme();
   const theme = useThemeStyles();
   const { selectedMosque, selectMosque } = useSelectedMosque();
-  const { locationTimeZone } = useAppPreferences();
+  const { activeLocation, locationTimeZone } = useAppPreferences();
   const { mosque } = route.params;
   const isHomeMosque = selectedMosque?.id === mosque.id;
   const [schedule, setSchedule] =
@@ -136,7 +137,7 @@ export default function MosqueDetailScreen({ navigation, route }: any) {
           <Text style={styles.heroName}>{mosque.name}</Text>
           <Text style={styles.address}>{mosque.address}</Text>
           <Text style={[styles.distance, { color: palette.gold }]}>
-            {mosque.distanceKm.toFixed(1)} km away
+            {distanceFromReader(activeLocation, mosque).toFixed(1)} km away
           </Text>
         </View>
 

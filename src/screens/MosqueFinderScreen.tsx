@@ -36,10 +36,12 @@ import {
   useThemeStyles,
 } from '../components/DesignSystem';
 import { useSelectedMosque } from '../components/SelectedMosqueContext';
+import { useAppPreferences } from '../components/AppPreferencesContext';
 import {
   CALGARY_CENTRE,
   distanceKm,
   fallbackNearbyMosques,
+  distanceFromReader,
   fetchMosquesInRegion,
   fetchNearbyMosques,
   geocodeCanadianPostalCode,
@@ -89,6 +91,7 @@ export default function MosqueFinderScreen({ navigation }: any) {
   const { selectedMosque: homeMosque, selectMosque } = useSelectedMosque();
   const mapRef = useRef<MapView>(null);
   const mapReadyRef = useRef(false);
+  const { activeLocation } = useAppPreferences();
   const mapOriginRef = useRef<Coordinates>(CALGARY_CENTRE);
   const loadRequestRef = useRef(0);
   const [query, setQuery] = useState('');
@@ -469,16 +472,17 @@ export default function MosqueFinderScreen({ navigation }: any) {
       >
         {results.map(mosque => (
           <Marker
-            accessibilityLabel={`${mosque.name}, ${mosque.distanceKm.toFixed(
-              1,
-            )} kilometres away`}
+            accessibilityLabel={`${mosque.name}, ${distanceFromReader(
+              activeLocation,
+              mosque,
+            ).toFixed(1)} kilometres away`}
             coordinate={{
               latitude: mosque.latitude,
               longitude: mosque.longitude,
             }}
-            description={`${mosque.distanceKm.toFixed(1)} km · ${
-              mosque.address
-            }`}
+            description={`${distanceFromReader(activeLocation, mosque).toFixed(
+              1,
+            )} km · ${mosque.address}`}
             key={mosque.id}
             onPress={() => {
               setSelectedMosque(mosque);
@@ -656,7 +660,8 @@ export default function MosqueFinderScreen({ navigation }: any) {
             <View style={styles.distanceRow}>
               <Navigation size={14} color={palette.green} />
               <Text style={[styles.cardDistance, { color: palette.green }]}>
-                {activeMosque.distanceKm.toFixed(1)} km away
+                {distanceFromReader(activeLocation, activeMosque).toFixed(1)} km
+                away
               </Text>
             </View>
             <Pressable
