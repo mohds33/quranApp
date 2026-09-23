@@ -41,6 +41,10 @@ import {
   HadithSample,
 } from '../data/hadith';
 import { quranLanguageOptions } from '../data/quran';
+import {
+  fetchHadithChapterTranslations,
+  hadithTranslationEdition,
+} from '../services/hadithTranslations';
 import { useAppPreferences } from '../components/AppPreferencesContext';
 import {
   fetchFullSahihBook,
@@ -71,6 +75,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
   const deferredQuery = useDeferredValue(query);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [translations, setTranslations] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (!source) {
@@ -133,6 +138,35 @@ export default function HadithBookScreen({ navigation, route }: any) {
     [filteredHadiths, visibleCount],
   );
 
+  // The full books ship Arabic and English; other languages are translated
+  // chapter by chapter as the reader scrolls.
+  const edition = hadithTranslationEdition(book.id, preferences.quranLanguage);
+  const rtlTranslation = preferences.quranLanguage === 'ur';
+  const visibleChapters = useMemo(
+    () =>
+      [...new Set(visibleHadiths.map(hadith => hadith.chapterId))].join(','),
+    [visibleHadiths],
+  );
+  useEffect(() => {
+    setTranslations({});
+  }, [edition]);
+  useEffect(() => {
+    if (!edition || !visibleChapters) return;
+    let active = true;
+    Promise.all(
+      visibleChapters
+        .split(',')
+        .map(Number)
+        .map(chapter => fetchHadithChapterTranslations(edition, chapter)),
+    ).then(chapters => {
+      if (!active) return;
+      setTranslations(current => Object.assign({}, current, ...chapters));
+    });
+    return () => {
+      active = false;
+    };
+  }, [edition, visibleChapters]);
+
   // Bookmarks are stored as "<book>:<hadith number>" so they survive restarts.
   const savedKey = (number: string) => `${book.id}:${number}`;
   const saved = preferences.savedHadiths;
@@ -186,6 +220,8 @@ export default function HadithBookScreen({ navigation, route }: any) {
 
   const renderFullHadith = ({ item }: { item: FullHadith }) => {
     const number = String(item.idInBook);
+    const translation = translations[item.id];
+    const text = (translation ?? item.english.text).replace(/\s+/g, ' ').trim();
     const isSaved = saved.includes(savedKey(number));
     const chapter = chapterMap.get(item.chapterId);
     return (
@@ -208,7 +244,7 @@ export default function HadithBookScreen({ navigation, route }: any) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Share Hadith ${number}`}
-              onPress={() => shareHadith(item.english.text, number)}
+              onPress={() => shareHadith(text, number)}
             >
               <Share2 size={18} color={palette.muted} />
             </Pressable>
@@ -232,17 +268,23 @@ export default function HadithBookScreen({ navigation, route }: any) {
             Arabic
           </Text>
           <Text style={[styles.languageLabel, theme.mutedText]}>
-            English translation
+            {translation ? activeLanguage.label : 'English'} translation
           </Text>
         </View>
         <Text style={[styles.arabic, theme.text]}>{item.arabic}</Text>
-        {item.english.narrator ? (
+        {!translation && item.english.narrator ? (
           <Text style={[styles.narratorLead, { color: palette.green }]}>
             {item.english.narrator.replace(/\s+/g, ' ').trim()}
           </Text>
         ) : null}
-        <Text style={[styles.translation, theme.text]}>
-          {item.english.text.replace(/\s+/g, ' ').trim()}
+        <Text
+          style={[
+            styles.translation,
+            translation && rtlTranslation && styles.rtlTranslation,
+            theme.text,
+          ]}
+        >
+          {text}
         </Text>
         {chapter?.arabic ? (
           <Text style={[styles.chapterArabic, theme.mutedText]}>
@@ -373,8 +415,9 @@ export default function HadithBookScreen({ navigation, route }: any) {
           </Text>
         </View>
         <Text style={[styles.fullText, theme.text]}>
-          Arabic with English translation · {fullBook.chapters.length} books ·
-          search the complete collection below.
+          Arabic with {edition ? activeLanguage.label : 'English'} translation ·{' '}
+          {fullBook.chapters.length} books · search the complete collection
+          below.
         </Text>
         <Pressable
           accessibilityRole="link"
@@ -790,6 +833,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 23,
     writingDirection: 'ltr',
+  },
+  rtlTranslation: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    fontSize: 16,
+    lineHeight: 30,
   },
   narrator: { color: colors.muted, fontSize: 10, marginTop: 12 },
   chapterArabic: {
