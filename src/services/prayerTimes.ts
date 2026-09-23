@@ -3888,6 +3888,11 @@ const plausibleWindows: Record<MasjidAyeshaPrayerName, [number, number]> = {
  * previous season's timetable or another city's times. Returns null when too
  * little survives to be useful.
  */
+/** Minutes between two times of day, as a signed value within half a day. */
+function minutesApart(from: number, to: number) {
+  return ((from - to + 2160) % 1440) - 720;
+}
+
 export function plausiblePublishedSchedule(
   schedule: PublishedMosquePrayerSchedule,
   origin: Coordinates,
@@ -3895,23 +3900,71 @@ export function plausiblePublishedSchedule(
   date = new Date(),
 ): PublishedMosquePrayerSchedule | null {
   const calculated = calculatePrayerSchedule(origin, date).dates;
-  const sunrise = minutesInTimeZone(calculated.Sunrise, timeZone);
+  // Compare in UTC and let the offset float: a masjid publishes its own local
+  // times, which a reader in another country still needs to see.
+  const expected = Object.fromEntries(
+    masjidAyeshaPrayerNames.map(name => [
+      name,
+      minutesInTimeZone(calculated[name], 'UTC'),
+    ]),
+  ) as Record<MasjidAyeshaPrayerName, number>;
+  const sunrise = minutesInTimeZone(calculated.Sunrise, 'UTC');
+
+  const publishedTimes = masjidAyeshaPrayerNames.flatMap(name =>
+    [schedule.adhan[name], schedule.iqamah[name]]
+      .filter((value): value is string => Boolean(value))
+      .map(value => ({ name, value, minutes: displayTimeMinutes(value) }))
+      .filter(entry => Number.isFinite(entry.minutes)),
+  );
+
+  const fitsAt = (
+    offset: number,
+    name: MasjidAyeshaPrayerName,
+    minutes: number,
+  ) => {
+    const [earliest, latest] = plausibleWindows[name];
+    const difference = minutesApart(minutes, expected[name] + offset);
+    if (difference < earliest || difference > latest) return false;
+    // A Fajr close to sunrise is almost always Shuruq mislabelled; the real
+    // gap between them is an hour or more.
+    return name !== 'Fajr' || minutesApart(minutes, sunrise + offset) <= -25;
+  };
+
+  // Only offsets this longitude could actually keep: real time zones sit
+  // within about three hours of local solar time. That still rejects another
+  // continent's timetable while accepting the masjid's own.
+  const solarOffset = Math.round((origin.longitude / 15) * 60);
+  const withinZone = (offset: number) =>
+    Math.abs(minutesApart(offset, solarOffset)) <= 180;
+  const viewerOffset = timeZone
+    ? minutesApart(
+        minutesInTimeZone(date, timeZone),
+        minutesInTimeZone(date, 'UTC'),
+      )
+    : 0;
+  // Prefer the reader's own offset when it fits equally well.
+  const offsets = withinZone(viewerOffset) ? [viewerOffset] : [];
+  for (let offset = -12 * 60; offset <= 14 * 60; offset += 15) {
+    if (offset !== viewerOffset && withinZone(offset)) offsets.push(offset);
+  }
+
+  let best = { offset: offsets[0] ?? viewerOffset, fits: -1 };
+  for (const offset of offsets) {
+    const fits = publishedTimes.filter(entry =>
+      fitsAt(offset, entry.name, entry.minutes),
+    ).length;
+    if (fits > best.fits) best = { offset, fits };
+  }
+
   const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
   const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
-  for (const name of masjidAyeshaPrayerNames) {
-    const expected = minutesInTimeZone(calculated[name], timeZone);
-    const [earliest, latest] = plausibleWindows[name];
-    const fits = (value?: string) => {
-      if (!value) return false;
-      const minutes = displayTimeMinutes(value);
-      if (!Number.isFinite(minutes)) return false;
-      const difference = ((minutes - expected + 2160) % 1440) - 720;
-      if (difference < earliest || difference > latest) return false;
-      // A Fajr time just before sunrise is almost always Shuruq mislabelled.
-      return name !== 'Fajr' || minutes <= sunrise - 10;
-    };
-    if (fits(schedule.adhan[name])) adhan[name] = schedule.adhan[name];
-    if (fits(schedule.iqamah[name])) iqamah[name] = schedule.iqamah[name];
+  for (const entry of publishedTimes) {
+    if (!fitsAt(best.offset, entry.name, entry.minutes)) continue;
+    if (schedule.adhan[entry.name] === entry.value) {
+      adhan[entry.name] = entry.value;
+    } else {
+      iqamah[entry.name] = entry.value;
+    }
   }
   const kept = masjidAyeshaPrayerNames.filter(
     name => adhan[name] || iqamah[name],

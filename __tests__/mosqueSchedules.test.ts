@@ -184,7 +184,7 @@ describe('plausibility against the sky', () => {
     ).toEqual(real.iqamah);
   });
 
-  it('drops another season’s Fajr and rejects another city’s times', () => {
+  it('drops another season’s Fajr', () => {
     const summer = plausiblePublishedSchedule(
       schedule({
         Fajr: '3:05 AM',
@@ -199,17 +199,45 @@ describe('plausibility against the sky', () => {
     );
     expect(summer?.iqamah.Fajr).toBeUndefined();
     expect(summer?.iqamah.Dhuhr).toBe('1:30 PM');
+  });
 
-    const jakarta = schedule({
-      Fajr: '4:35 AM',
-      Dhuhr: '11:53 AM',
-      Asr: '3:14 PM',
-      Maghrib: '5:47 PM',
-      Isha: '6:59 PM',
-    });
+  it('refuses times that cannot all belong to one day', () => {
+    // What a page's publish timestamp looked like once it was read as a time.
     expect(
-      plausiblePublishedSchedule(jakarta, london, 'Europe/London', today),
+      plausiblePublishedSchedule(
+        schedule({
+          Fajr: '4:52 PM',
+          Dhuhr: '4:52 PM',
+          Asr: '4:52 PM',
+          Maghrib: '4:52 PM',
+          Isha: '4:52 PM',
+        }),
+        london,
+        'Europe/London',
+        today,
+      ),
     ).toBeNull();
+  });
+
+  it('keeps a masjid’s own times when the reader is in another country', () => {
+    // Al Rashid in Edmonton, read from London: its local times must survive.
+    const edmonton = { latitude: 53.5966, longitude: -113.5094 };
+    const rashid = schedule({
+      Fajr: '5:40 AM',
+      Dhuhr: '1:37 PM',
+      Asr: '4:52 PM',
+      Maghrib: '7:39 PM',
+      Isha: '9:35 PM',
+    });
+    for (const timeZone of [
+      'America/Edmonton',
+      'Europe/London',
+      'Asia/Dubai',
+    ]) {
+      expect(
+        plausiblePublishedSchedule(rashid, edmonton, timeZone, today)?.iqamah,
+      ).toEqual(rashid.iqamah);
+    }
   });
 
   it('treats a Fajr time just before sunrise as Shuruq', () => {
