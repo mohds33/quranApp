@@ -77,6 +77,47 @@ describe('timetable tables', () => {
     expect(parseTimetableTablesForDate(html, today)).toBeNull();
   });
 
+  it('ignores prayer names in page metadata and machine timestamps', () => {
+    // Real pages list every prayer name in their SEO description, followed by
+    // a publish date; that date must not be read as a prayer time.
+    const schedule = parsePublishedMosqueWebsiteHTML(
+      `<head>
+         <meta property="og:description" content="Salah Adhan Iqamah Fajr Sunrise Dhuhr Asr Maghrib Isha Al Rashid" />
+         <meta property="article:published_time" content="2025-09-26T04:52:04+00:00" />
+       </head>
+       <body><div>ADHAN</div><div>IQAMAH</div>
+         <div>Fajr</div><div>05:20 AM</div><div>05:40 AM</div>
+         <div>Sunrise</div><div>07:20 AM</div>
+         <div>Dhuhr</div><div>01:27 PM</div><div>01:37 PM</div>
+         <div>Asr</div><div>04:42 PM</div><div>04:52 PM</div>
+         <div>Maghrib</div><div>07:34 PM</div><div>07:39 PM</div>
+         <div>Isha</div><div>09:25 PM</div><div>09:35 PM</div>
+       </body>`,
+      {
+        id: 'x',
+        name: 'Al Rashid Mosque',
+        address: 'Edmonton',
+        latitude: 53.5966,
+        longitude: -113.5094,
+        distanceKm: 0,
+      },
+    );
+    expect(schedule.adhan).toEqual({
+      Fajr: '05:20 AM',
+      Dhuhr: '01:27 PM',
+      Asr: '04:42 PM',
+      Maghrib: '07:34 PM',
+      Isha: '09:25 PM',
+    });
+    expect(schedule.iqamah).toEqual({
+      Fajr: '05:40 AM',
+      Dhuhr: '01:37 PM',
+      Asr: '04:52 PM',
+      Maghrib: '07:39 PM',
+      Isha: '09:35 PM',
+    });
+  });
+
   it('reads a late-morning Dhuhr without AM/PM as morning', () => {
     const schedule = parsePublishedMosqueWebsiteHTML(
       '<div>Subuh 04:35</div><div>Zuhur 11:53</div><div>Ashar 15:14</div><div>Maghrib 17:47</div><div>Isya 18:59</div>',

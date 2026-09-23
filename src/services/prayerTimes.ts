@@ -320,6 +320,19 @@ function normalizeLocalizedWebsiteText(value: string) {
     .replace(/ß/g, 'ss');
 }
 
+/**
+ * Removes machine timestamps such as "2025-09-26T04:52:04+00:00" and
+ * "12:30:45", so a published date is never read as a prayer time.
+ */
+function withoutTimestamps(value: string) {
+  return value
+    .replace(
+      /\d{4}-\d{1,2}-\d{1,2}[t\s]?\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:z|[+-]\d{2}:?\d{2})?/gi,
+      ' ',
+    )
+    .replace(/\d{1,2}:\d{2}:\d{2}/g, ' ');
+}
+
 function websiteHtmlToText(html: string) {
   const chunks: string[] = [];
   const ignoredTags = new Set(['script', 'style', 'template']);
@@ -442,7 +455,7 @@ function websiteHtmlToText(html: string) {
     cursor = closing + 1;
   }
 
-  return normalizeLocalizedWebsiteText(chunks.join(''))
+  return withoutTimestamps(normalizeLocalizedWebsiteText(chunks.join('')))
     .replace(/[^\S\r\n]+/g, ' ')
     .replace(/\s*\n\s*/g, '\n')
     .replace(/\n{2,}/g, '\n')
@@ -914,10 +927,13 @@ function semanticWebsiteTime(
 
   for (const match of html.matchAll(/<[^>]+>/g)) {
     const tag = normalizeLocalizedWebsiteText(match[0]);
+    // <meta>/<link> tags repeat every prayer name for search engines, and the
+    // markup after them holds publish dates rather than a timetable.
+    if (/^<\s*(?:meta|link|script|style|title|base)\b/i.test(tag)) continue;
     if (!prayerPattern.test(tag) || !rolePattern.test(tag)) continue;
     const start = (match.index ?? 0) + match[0].length;
-    const nearbyHTML = normalizeLocalizedWebsiteText(
-      html.slice(start, start + 260),
+    const nearbyHTML = withoutTimestamps(
+      normalizeLocalizedWebsiteText(html.slice(start, start + 260)),
     );
     const time = nearbyHTML.match(websiteTimePattern)?.[0] ?? '';
     const normalized = normalizeWebsiteTime(time, name);
