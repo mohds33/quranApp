@@ -1,5 +1,8 @@
 import {
+  extractPrayerScheduleLinks,
   fetchMosqueIqamahSchedule,
+  masjidalWidgetId,
+  parseMasjidalPrayerPayload,
   parseMawaqitSearchResult,
   parsePublishedMosqueWebsiteHTML,
   parseTimetableTablesForDate,
@@ -131,6 +134,70 @@ describe('timetable tables', () => {
       },
     );
     expect(schedule.iqamah.Dhuhr).toBe('11:53 AM');
+  });
+});
+
+describe('embedded widgets', () => {
+  it('follows a timetable embedded in an iframe', () => {
+    const links = extractPrayerScheduleLinks(
+      `<p>Prayer times</p>
+       <iframe src="https://masjidal.com/widget/simple/v3?masjid_id=M0dYkvL6"></iframe>
+       <iframe src="https://www.youtube.com/embed/abc123"></iframe>`,
+      'https://masjidalfatima.com/',
+    );
+    expect(links).toEqual([
+      'https://masjidal.com/widget/simple/v3?masjid_id=M0dYkvL6',
+    ]);
+  });
+
+  it('reads the masjid id from a widget address', () => {
+    expect(
+      masjidalWidgetId(
+        'https://masjidal.com/widget/simple/v3?masjid_id=M0dYkvL6',
+      ),
+    ).toBe('M0dYkvL6');
+    expect(masjidalWidgetId('https://masjidalfatima.com/')).toBe('');
+  });
+
+  it('reads adhan, iqamah and both Jumu’ah times from the widget API', () => {
+    const schedule = parseMasjidalPrayerPayload(
+      {
+        status: 'success',
+        data: {
+          salah: {
+            fajr: '5:22 AM',
+            sunrise: '7:22 AM',
+            zuhr: '1:30 PM',
+            asr: '5:27 PM',
+            maghrib: '7:31 PM',
+            isha: '9:25 PM',
+          },
+          iqama: {
+            fajr: '6:30 AM',
+            zuhr: '2:00 PM',
+            asr: '5:45 PM',
+            maghrib: '7:36 PM',
+            isha: '9:30 PM',
+            jummah1: '2:00 PM',
+            jummah2: '2:45 PM',
+          },
+        },
+      },
+      {
+        id: 'f',
+        name: 'Masjid Al Fatima',
+        address: 'Edmonton',
+        latitude: 53.4536,
+        longitude: -113.4727,
+        distanceKm: 0,
+      },
+      'https://masjidal.com/widget/simple/v3?masjid_id=M0dYkvL6',
+    );
+    expect(schedule.adhan.Fajr).toBe('05:22 AM');
+    expect(schedule.adhan.Dhuhr).toBe('01:30 PM');
+    expect(schedule.iqamah.Fajr).toBe('06:30 AM');
+    expect(schedule.iqamah.Isha).toBe('09:30 PM');
+    expect(schedule.jummah).toEqual(['02:00 PM', '02:45 PM']);
   });
 });
 

@@ -1566,6 +1566,30 @@ export function extractPrayerScheduleLinks(html: string, sourceUrl: string) {
   const trustedWidgetHost =
     /^(?:timing\.)?athanplus\.com$|^(?:www\.)?mymasjidal\.com$|^(?:www\.)?masjidal\.com$|^(?:www\.)?mawaqit\.net$|^(?:www\.)?masjidbox\.com$/i;
 
+  // Masjids often embed their timetable in an iframe widget rather than
+  // linking to it, so the schedule is never in the page's own markup.
+  const iframes =
+    /<iframe\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi;
+  for (const match of html.matchAll(iframes)) {
+    const rawSrc = (match[1] ?? match[2] ?? match[3] ?? '')
+      .replace(/&amp;/gi, '&')
+      .trim();
+    if (!rawSrc) continue;
+    try {
+      const resolved = new URL(rawSrc, base);
+      if (
+        /^https?:$/.test(resolved.protocol) &&
+        (trustedWidgetHost.test(resolved.hostname.toLowerCase()) ||
+          websiteScheduleWords.test(resolved.href)) &&
+        !links.includes(resolved.href)
+      ) {
+        links.push(resolved.href);
+      }
+    } catch {
+      // Ignore malformed iframe sources.
+    }
+  }
+
   for (const match of html.matchAll(anchors)) {
     const rawHref = (match[1] ?? match[2] ?? match[3] ?? '')
       .replace(/&amp;/gi, '&')
@@ -2671,6 +2695,82 @@ function isAthanPlusScheduleUrl(url: string) {
   }
 }
 
+/** Masjidal (also sold as Athan+) widgets name their masjid in the URL. */
+export function masjidalWidgetId(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (
+      !/^(?:www\.)?(?:masjidal|mymasjidal)\.com$|^(?:timing\.)?athanplus\.com$/i.test(
+        parsed.hostname,
+      )
+    ) {
+      return '';
+    }
+    const id = parsed.searchParams.get('masjid_id') ?? '';
+    return /^[A-Za-z0-9_-]{4,40}$/.test(id) ? id : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Today's times from the Masjidal widget API, which the widget itself calls. */
+export function parseMasjidalPrayerPayload(
+  payload: any,
+  mosque: Mosque,
+  sourceUrl: string,
+): PublishedMosquePrayerSchedule {
+  const salah = payload?.data?.salah ?? {};
+  const iqama = payload?.data?.iqama ?? {};
+  const keys: Array<[MasjidAyeshaPrayerName, string]> = [
+    ['Fajr', 'fajr'],
+    ['Dhuhr', 'zuhr'],
+    ['Asr', 'asr'],
+    ['Maghrib', 'maghrib'],
+    ['Isha', 'isha'],
+  ];
+  const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
+  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
+  for (const [name, key] of keys) {
+    const start = normalizeWebsiteTime(String(salah[key] ?? ''), name);
+    const jamaah = normalizeWebsiteTime(String(iqama[key] ?? ''), name);
+    if (start) adhan[name] = start;
+    if (jamaah) iqamah[name] = jamaah;
+  }
+  if (!Object.keys(adhan).length && !Object.keys(iqamah).length) {
+    throw new Error('The Masjidal widget returned no prayer times.');
+  }
+  const jummah = ['jummah1', 'jummah2', 'jummah3']
+    .map(key => normalizeWebsiteTime(String(iqama[key] ?? ''), 'Dhuhr'))
+    .filter(Boolean)
+    .slice(0, 3);
+  return {
+    adhan,
+    iqamah,
+    jummah,
+    sourceName: mosque.name,
+    sourceUrl,
+    sourceLabel: 'Official website · Masjidal',
+    verified: true,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+async function fetchMasjidalPrayerSchedule(
+  masjidId: string,
+  mosque: Mosque,
+  sourceUrl: string,
+) {
+  const response = await fetchWithTimeout(
+    `https://masjidal.com/api/v1/time?masjid_id=${encodeURIComponent(
+      masjidId,
+    )}`,
+    6000,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!response.ok) throw new Error('The Masjidal widget could not be read.');
+  return parseMasjidalPrayerPayload(await response.json(), mosque, sourceUrl);
+}
+
 function isMawaqitScheduleUrl(url: string) {
   try {
     return /^(?:www\.)?mawaqit\.net$/i.test(new URL(url).hostname);
@@ -2720,7 +2820,7 @@ function isRejectedWebsiteSearchHost(hostname: string) {
   return (
     /^(?:duckduckgo|google|bing|yahoo)\./.test(host) ||
     isSocialWebsiteHost(host) ||
-    /(?:^|\.)(?:yelp|mapquest|yellowpages|findglocal|canada-listing|informalberta|timesofsalah|globalprayertimes|prayersconnect|prayercalctime|islamicfinder|muslimandquran|salatomatic|esalah|jammat|masjidway|mapcarta|tripadvisor|waze|wikipedia|praysalat|cybo|travelsetu|adequatetravel|ancient-history-sites|islamicdates|muslimapp|alummahai|prayer-times)\./.test(
+    /(?:^|\.)(?:yelp|mapquest|yellowpages|findglocal|canada-listing|informalberta|timesofsalah|globalprayertimes|prayersconnect|prayercalctime|islamicfinder|muslimandquran|salatomatic|esalah|jammat|masjidway|mapcarta|tripadvisor|waze|wikipedia|praysalat|cybo|travelsetu|adequatetravel|ancient-history-sites|islamicdates|muslimapp|alummahai|prayer-times|niyatapp)\./.test(
       host,
     ) ||
     /(?:^|\.)(?:211\.ca|maps\.apple\.com)$/.test(host)
@@ -3088,6 +3188,10 @@ async function fetchOfficialMosqueWebsiteSchedule(
     return fetchAlKafeelKarbalaPrayerSchedule(mosque);
   }
 
+  const widgetId = masjidalWidgetId(resolvedSourceUrl);
+  if (widgetId) {
+    return fetchMasjidalPrayerSchedule(widgetId, mosque, resolvedSourceUrl);
+  }
   if (isAthanPlusScheduleUrl(resolvedSourceUrl)) {
     return parseAthanPlusPrayerScheduleHTML(html, mosque, resolvedSourceUrl);
   }
@@ -3143,6 +3247,14 @@ async function fetchOfficialMosqueWebsiteSchedule(
       }
       return parsePublishedMosquePDFText(
         await NativeAppleMapsSearch.extractPdfText(linkedSourceUrl),
+        mosque,
+        linkedSourceUrl,
+      );
+    }
+    const linkedWidgetId = masjidalWidgetId(linkedSourceUrl);
+    if (linkedWidgetId) {
+      return fetchMasjidalPrayerSchedule(
+        linkedWidgetId,
         mosque,
         linkedSourceUrl,
       );
