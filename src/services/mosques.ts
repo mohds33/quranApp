@@ -311,6 +311,9 @@ function parseAppleMapsMosques(payloadJSON: string, origin: Coordinates) {
 export async function searchMosquesByName(
   query: string,
   origin: Coordinates,
+  /** The town to search in. Maps answer a bare masjid name with whichever
+   *  namesake it ranks highest, which is often in another country. */
+  nearTown?: string,
 ): Promise<Mosque[]> {
   const appleMapsSearch = NativeAppleMapsSearch;
   if (Platform.OS === 'ios' && appleMapsSearch) {
@@ -319,9 +322,17 @@ export async function searchMosquesByName(
       /\b(mosque|masjid|islamic|muslim|jama|jami|cami|mezquita|mosqu[eé]e)\b|مسجد/i.test(
         trimmedQuery,
       );
-    const appleQueries = alreadyDescribesMosque
+    const baseQueries = alreadyDescribesMosque
       ? [trimmedQuery, `${trimmedQuery} mosque`]
       : [`${trimmedQuery} mosque`, `${trimmedQuery} masjid`];
+    const town = nearTown?.trim();
+    const namesTown =
+      town &&
+      trimmedQuery.toLocaleLowerCase().includes(town.toLocaleLowerCase());
+    const appleQueries =
+      town && !namesTown
+        ? [...baseQueries.map(entry => `${entry} ${town}`), ...baseQueries]
+        : baseQueries;
     const responses = await Promise.allSettled(
       appleQueries.map(appleQuery =>
         appleMapsSearch.searchPlaces(

@@ -352,10 +352,18 @@ export default function MosqueFinderScreen({ navigation }: any) {
     setMessage(`Searching Apple Maps for “${query.trim()}”…`);
     const requestId = ++loadRequestRef.current;
     try {
-      const namedMosques = await searchMosquesByName(query.trim(), {
+      // Search around the location set in the app, not wherever the map was
+      // left: masjid names repeat between cities, and "Search this area" is
+      // there for looking somewhere else on purpose.
+      const searchOrigin = activeLocation ?? {
         latitude: visibleRegion.latitude,
         longitude: visibleRegion.longitude,
-      });
+      };
+      const namedMosques = await searchMosquesByName(
+        query.trim(),
+        searchOrigin,
+        activeLocation?.label?.split(',')[0]?.trim(),
+      );
       if (requestId !== loadRequestRef.current) return;
       if (!namedMosques.length) {
         setSearchError(`No Apple Maps result found for “${query.trim()}”.`);
