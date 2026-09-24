@@ -3458,43 +3458,45 @@ async function fetchOfficialMosqueWebsiteSchedule(
   }
 
   if (!schedules.length && Platform.OS === 'ios' && NativeAppleMapsSearch) {
-    try {
-      const renderedHTML =
-        await NativeAppleMapsSearch.extractRenderedWebsiteHTML(
-          resolvedSourceUrl,
-        );
-      if (
-        !websiteMatchesSelectedMosque(renderedHTML, mosque) &&
-        !(
-          allowLocationIdentity &&
-          websiteStrongLocationMatchesSelectedMosque(renderedHTML, mosque)
-        )
-      ) {
-        throw new Error(
-          'The rendered website belongs to another organization.',
-        );
-      }
+    // Some sites draw their timetable only once a browser runs the page, and
+    // often on a separate timings page rather than the front page.
+    const renderable = [resolvedSourceUrl, ...linkedScheduleLinks.slice(0, 2)];
+    for (const pageUrl of renderable) {
+      if (schedules.length) break;
       try {
-        schedules.push(
-          parsePublishedMosqueWebsiteHTML(renderedHTML, {
-            ...mosque,
-            website: resolvedSourceUrl,
-          }),
-        );
-      } catch {
-        // The rendered page may expose its timetable as JSON instead of text.
-      }
-      for (const payload of extractEmbeddedPrayerScheduleData(renderedHTML)) {
+        const renderedHTML =
+          await NativeAppleMapsSearch.extractRenderedWebsiteHTML(pageUrl);
+        if (
+          !websiteMatchesSelectedMosque(renderedHTML, mosque) &&
+          !(
+            allowLocationIdentity &&
+            websiteStrongLocationMatchesSelectedMosque(renderedHTML, mosque)
+          )
+        ) {
+          continue;
+        }
         try {
           schedules.push(
-            parsePublishedMosqueWebsiteData(payload, mosque, resolvedSourceUrl),
+            parsePublishedMosqueWebsiteHTML(renderedHTML, {
+              ...mosque,
+              website: pageUrl,
+            }),
           );
         } catch {
-          // Ignore unrelated rendered application state.
+          // The rendered page may expose its timetable as JSON instead of text.
         }
+        for (const payload of extractEmbeddedPrayerScheduleData(renderedHTML)) {
+          try {
+            schedules.push(
+              parsePublishedMosqueWebsiteData(payload, mosque, pageUrl),
+            );
+          } catch {
+            // Ignore unrelated rendered application state.
+          }
+        }
+      } catch {
+        // Try the next page, then give up on this website.
       }
-    } catch {
-      // Continue to the next verified website candidate.
     }
   }
 
