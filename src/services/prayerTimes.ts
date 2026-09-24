@@ -1564,7 +1564,7 @@ export function extractPrayerScheduleLinks(html: string, sourceUrl: string) {
   }
   const baseHost = base.hostname.toLowerCase().replace(/^www\./, '');
   const trustedWidgetHost =
-    /^(?:timing\.)?athanplus\.com$|^(?:www\.)?mymasjidal\.com$|^(?:www\.)?masjidal\.com$|^(?:www\.)?mawaqit\.net$|^(?:www\.)?masjidbox\.com$/i;
+    /^(?:timing\.)?athanplus\.com$|^(?:www\.)?mymasjidal\.com$|^(?:www\.)?masjidal\.com$|^(?:www\.)?mawaqit\.net$|^(?:www\.)?masjidbox\.com$|^(?:[a-z0-9-]+\.)?my-masjid\.com$/i;
 
   // Masjids often embed their timetable in an iframe widget rather than
   // linking to it, so the schedule is never in the page's own markup.
@@ -2771,6 +2771,93 @@ async function fetchMasjidalPrayerSchedule(
   return parseMasjidalPrayerPayload(await response.json(), mosque, sourceUrl);
 }
 
+/** MyMasjid timing screens name the masjid by a guid in the path. */
+export function myMasjidWidgetGuid(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (!/(?:^|\.)my-masjid\.com$/i.test(parsed.hostname)) return '';
+    const fromPath = parsed.pathname.match(
+      /\/(?:timingscreen|mobilescreen|screen)\/([0-9a-f-]{32,40})/i,
+    )?.[1];
+    const guid = fromPath ?? parsed.searchParams.get('GuidId') ?? '';
+    return /^[0-9a-f-]{32,40}$/i.test(guid) ? guid : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Today's row of a MyMasjid year timetable, with its Jumu'ah times. */
+export function parseMyMasjidTimings(
+  payload: any,
+  mosque: Mosque,
+  sourceUrl: string,
+  date = new Date(),
+): PublishedMosquePrayerSchedule {
+  const timings: any[] = payload?.model?.salahTimings ?? [];
+  const today = timings.find(
+    entry =>
+      Number(entry?.day) === date.getDate() &&
+      Number(entry?.month) === date.getMonth() + 1,
+  );
+  if (!today) {
+    throw new Error('The MyMasjid timetable has no row for today.');
+  }
+  const keys: Array<[MasjidAyeshaPrayerName, string, string]> = [
+    ['Fajr', 'fajr', 'iqamah_Fajr'],
+    ['Dhuhr', 'zuhr', 'iqamah_Zuhr'],
+    ['Asr', 'asr', 'iqamah_Asr'],
+    ['Maghrib', 'maghrib', 'iqamah_Maghrib'],
+    ['Isha', 'isha', 'iqamah_Isha'],
+  ];
+  const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
+  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
+  for (const [name, startKey, jamaahKey] of keys) {
+    const start = normalizeWebsiteTime(String(today[startKey] ?? ''), name);
+    const jamaah = normalizeWebsiteTime(String(today[jamaahKey] ?? ''), name);
+    if (start) adhan[name] = start;
+    if (jamaah) iqamah[name] = jamaah;
+  }
+  if (!Object.keys(adhan).length && !Object.keys(iqamah).length) {
+    throw new Error('The MyMasjid timetable had no times for today.');
+  }
+  const jummah = (payload?.model?.jumahSalahIqamahTimings ?? [])
+    .map((entry: any) =>
+      normalizeWebsiteTime(
+        String(entry?.iqamahTime ?? entry?.time ?? ''),
+        'Dhuhr',
+      ),
+    )
+    .filter(Boolean)
+    .slice(0, 3);
+  return {
+    adhan,
+    iqamah,
+    jummah,
+    sourceName: String(payload?.model?.masjidDetails?.name ?? mosque.name),
+    sourceUrl,
+    sourceLabel: 'Official website · MyMasjid',
+    verified: true,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+async function fetchMyMasjidSchedule(
+  guid: string,
+  mosque: Mosque,
+  sourceUrl: string,
+) {
+  const response = await fetchWithTimeout(
+    `https://time.my-masjid.com/api/TimingsInfoScreen/GetMasjidTimings?GuidId=${encodeURIComponent(
+      guid,
+    )}`,
+    6000,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!response.ok)
+    throw new Error('The MyMasjid timetable could not be read.');
+  return parseMyMasjidTimings(await response.json(), mosque, sourceUrl);
+}
+
 function isMawaqitScheduleUrl(url: string) {
   try {
     return /^(?:www\.)?mawaqit\.net$/i.test(new URL(url).hostname);
@@ -2820,7 +2907,7 @@ function isRejectedWebsiteSearchHost(hostname: string) {
   return (
     /^(?:duckduckgo|google|bing|yahoo)\./.test(host) ||
     isSocialWebsiteHost(host) ||
-    /(?:^|\.)(?:yelp|mapquest|yellowpages|findglocal|canada-listing|informalberta|timesofsalah|globalprayertimes|prayersconnect|prayercalctime|islamicfinder|muslimandquran|salatomatic|esalah|jammat|masjidway|mapcarta|tripadvisor|waze|wikipedia|praysalat|cybo|travelsetu|adequatetravel|ancient-history-sites|islamicdates|muslimapp|alummahai|prayer-times|niyatapp)\./.test(
+    /(?:^|\.)(?:yelp|mapquest|yellowpages|findglocal|canada-listing|informalberta|timesofsalah|globalprayertimes|prayersconnect|prayercalctime|islamicfinder|muslimandquran|salatomatic|esalah|jammat|masjidway|mapcarta|tripadvisor|waze|wikipedia|praysalat|cybo|travelsetu|adequatetravel|ancient-history-sites|islamicdates|muslimapp|alummahai|prayer-times)\./.test(
       host,
     ) ||
     /(?:^|\.)(?:211\.ca|maps\.apple\.com)$/.test(host)
@@ -2947,9 +3034,21 @@ export function extractBingWebsiteSearchCandidates(xml: string) {
 }
 
 export function mosqueCity(mosque: Mosque) {
+  // Maps write the town, region and postal code as one part, as in
+  // "Edmonton AB T6L 3Z7" or "Boston MA 02119"; the town is what is wanted.
+  const withoutRegion = (part: string) =>
+    part
+      .replace(/\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/gi, ' ')
+      .replace(/\b\d{5}(?:-\d{4})?\b/g, ' ')
+      .replace(
+        /\b(?:AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/g,
+        ' ',
+      )
+      .replace(/\s{2,}/g, ' ')
+      .trim();
   const parts = mosque.address
     .split(/[,،]/)
-    .map(part => part.trim())
+    .map(part => withoutRegion(part.trim()))
     .filter(Boolean);
   return (
     [...parts].reverse().find(part => {
@@ -3192,6 +3291,10 @@ async function fetchOfficialMosqueWebsiteSchedule(
   if (widgetId) {
     return fetchMasjidalPrayerSchedule(widgetId, mosque, resolvedSourceUrl);
   }
+  const myMasjidGuid = myMasjidWidgetGuid(resolvedSourceUrl);
+  if (myMasjidGuid) {
+    return fetchMyMasjidSchedule(myMasjidGuid, mosque, resolvedSourceUrl);
+  }
   if (isAthanPlusScheduleUrl(resolvedSourceUrl)) {
     return parseAthanPlusPrayerScheduleHTML(html, mosque, resolvedSourceUrl);
   }
@@ -3258,6 +3361,10 @@ async function fetchOfficialMosqueWebsiteSchedule(
         mosque,
         linkedSourceUrl,
       );
+    }
+    const linkedMyMasjidGuid = myMasjidWidgetGuid(linkedSourceUrl);
+    if (linkedMyMasjidGuid) {
+      return fetchMyMasjidSchedule(linkedMyMasjidGuid, mosque, linkedSourceUrl);
     }
     const linkedHTML = await linkedResponse.text();
     if (isAthanPlusScheduleUrl(linkedSourceUrl)) {
@@ -3488,6 +3595,34 @@ function firstSuccessfulRequest<T>(requests: Promise<T>[]) {
 }
 
 async function verifyOfficialMosqueWebsite(mosque: Mosque, website: string) {
+  return (await verifiedMosqueWebsite(mosque, website)).website;
+}
+
+/** How much a domain reads like this masjid's own: masjidalfarooq.ca is the
+ *  masjid, a directory that lists it is not. */
+function websiteDomainScore(mosque: Mosque, website: string) {
+  try {
+    const host = new URL(website).hostname
+      .toLowerCase()
+      .replace(/^www\./, '')
+      .split('.')[0]
+      .replace(/[^a-z0-9]/g, '');
+    const words = normalizedMosqueName(mosque.name)
+      .split(' ')
+      .filter(word => word.length > 2);
+    if (!words.length || !host) return 0;
+    return words.filter(word => host.includes(word)).length / words.length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Checks a candidate website, and scores how likely it is to be this masjid's
+ * own: masjid names repeat across cities and directories list them all, so a
+ * domain named after the masjid, and a page naming its town, are what count.
+ */
+async function verifiedMosqueWebsite(mosque: Mosque, website: string) {
   const response = await fetchWithTimeout(website, 5500, {
     headers: {
       Accept: 'text/html,application/xhtml+xml',
@@ -3505,7 +3640,12 @@ async function verifyOfficialMosqueWebsite(mosque: Mosque, website: string) {
   ) {
     throw new Error('The website identity did not match the selected mosque.');
   }
-  return response.url || website;
+  return {
+    website: response.url || website,
+    score:
+      websiteDomainScore(mosque, response.url || website) * 2 +
+      (websiteLocationMatchesSelectedMosque(html, mosque) ? 1 : 0),
+  };
 }
 
 function socialWebsiteValues(mosque: Mosque) {
@@ -3654,11 +3794,21 @@ export async function findOfficialMosqueWebsite(mosque: Mosque) {
           result.status === 'fulfilled' ? result.value : [],
         ),
       ).filter(website => !listedWebsites.includes(website));
-      return firstSuccessfulRequest(
+      const verified = await Promise.allSettled(
         websites
           .slice(0, 8)
-          .map(website => verifyOfficialMosqueWebsite(mosque, website)),
+          .map(website => verifiedMosqueWebsite(mosque, website)),
       );
+      const candidates = verified.flatMap(result =>
+        result.status === 'fulfilled' ? [result.value] : [],
+      );
+      const best = candidates.sort(
+        (left, right) => right.score - left.score,
+      )[0];
+      if (!best) {
+        throw new Error('No verified official mosque website was found.');
+      }
+      return best.website;
     })();
     const website = await firstSuccessfulRequest([
       listedRequest,

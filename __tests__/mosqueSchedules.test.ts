@@ -2,6 +2,9 @@ import {
   extractPrayerScheduleLinks,
   fetchMosqueIqamahSchedule,
   masjidalWidgetId,
+  mosqueCity,
+  myMasjidWidgetGuid,
+  parseMyMasjidTimings,
   parseMasjidalPrayerPayload,
   parseMawaqitSearchResult,
   parsePublishedMosqueWebsiteHTML,
@@ -198,6 +201,102 @@ describe('embedded widgets', () => {
     expect(schedule.iqamah.Fajr).toBe('06:30 AM');
     expect(schedule.iqamah.Isha).toBe('09:30 PM');
     expect(schedule.jummah).toEqual(['02:00 PM', '02:45 PM']);
+  });
+});
+
+describe('MyMasjid widgets', () => {
+  it('reads the masjid guid from a timing screen address', () => {
+    expect(
+      myMasjidWidgetGuid(
+        'https://time.my-masjid.com/timingscreen/d1a89c2e-fe0a-4009-8097-b29409b0107e',
+      ),
+    ).toBe('d1a89c2e-fe0a-4009-8097-b29409b0107e');
+    expect(myMasjidWidgetGuid('https://masjidalfarooq.ca/')).toBe('');
+  });
+
+  it('takes today’s row out of the year timetable', () => {
+    const payload = {
+      model: {
+        masjidDetails: { name: 'Masjid Al Farooq' },
+        salahTimings: [
+          {
+            day: 17,
+            month: 9,
+            fajr: '05:18',
+            zuhr: '13:31',
+            asr: '16:44',
+            maghrib: '19:34',
+            isha: '21:27',
+            iqamah_Fajr: '06:45',
+            iqamah_Zuhr: '14:15',
+            iqamah_Asr: '18:15',
+            iqamah_Maghrib: '19:36',
+            iqamah_Isha: '21:30',
+          },
+          {
+            day: 18,
+            month: 9,
+            fajr: '05:20',
+            zuhr: '13:31',
+            asr: '16:42',
+            maghrib: '19:32',
+            isha: '21:25',
+            iqamah_Fajr: '06:45',
+            iqamah_Zuhr: '14:15',
+            iqamah_Asr: '18:15',
+            iqamah_Maghrib: '19:34',
+            iqamah_Isha: '21:30',
+          },
+        ],
+        jumahSalahIqamahTimings: [{ time: '14:30', iqamahTime: '14:35' }],
+      },
+    };
+    const mosque = {
+      id: 'f',
+      name: 'Masjid Al-Farooq',
+      address: '345 Woodvale Rd W, Edmonton AB T6L 3Z7, Canada',
+      latitude: 53.4735,
+      longitude: -113.4283,
+      distanceKm: 0,
+    };
+    const schedule = parseMyMasjidTimings(
+      payload,
+      mosque,
+      'https://time.my-masjid.com/timingscreen/guid',
+      today,
+    );
+    expect(schedule.adhan.Fajr).toBe('05:20 AM');
+    expect(schedule.adhan.Isha).toBe('9:25 PM');
+    expect(schedule.iqamah.Asr).toBe('6:15 PM');
+    expect(schedule.jummah).toEqual(['2:35 PM']);
+    expect(() =>
+      parseMyMasjidTimings(
+        { model: { salahTimings: [{ day: 1, month: 1 }] } },
+        mosque,
+        'x',
+        today,
+      ),
+    ).toThrow(/no row for today/i);
+  });
+});
+
+describe('addresses', () => {
+  it('reads the town out of a map-formatted address', () => {
+    const at = (address: string) =>
+      mosqueCity({
+        id: 'x',
+        name: 'Test',
+        address,
+        latitude: 0,
+        longitude: 0,
+        distanceKm: 0,
+      });
+    // Maps glue the town to its region and postal code in one part.
+    expect(at('345 Woodvale Rd W, Edmonton AB T6L 3Z7, Canada')).toBe(
+      'Edmonton',
+    );
+    expect(at('100 Malcolm X Blvd, Boston MA 02119, USA')).toBe('Boston');
+    expect(at('Whitechapel Rd, London, United Kingdom')).toBe('London');
   });
 });
 
