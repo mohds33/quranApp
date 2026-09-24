@@ -48,7 +48,10 @@ import {
   searchMosquesByName,
 } from '../services/mosques';
 import type { Coordinates, Mosque } from '../services/mosques';
-import { getCurrentCoordinates } from '../services/location';
+import {
+  geocodeAddressOrCity,
+  getCurrentCoordinates,
+} from '../services/location';
 import {
   readLastMosqueSearch,
   saveLastMosqueSearch,
@@ -63,6 +66,21 @@ const INITIAL_REGION: Region = {
 
 function normalizedPostalCode(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/** Whether the search text is the masjid's own name rather than a town. */
+function queryNamesMosque(query: string, mosqueName: string) {
+  const simplify = (value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\b(mosque|masjid|islamic|muslim|centre|center|society)\b/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const words = simplify(query).split(' ').filter(Boolean);
+  const name = simplify(mosqueName);
+  return words.length > 0 && words.every(word => name.includes(word));
 }
 
 function isCanadianPostalCode(value: string) {
@@ -359,15 +377,47 @@ export default function MosqueFinderScreen({ navigation }: any) {
         latitude: visibleRegion.latitude,
         longitude: visibleRegion.longitude,
       };
-      const namedMosques = await searchMosquesByName(
-        query.trim(),
-        searchOrigin,
-        activeLocation?.label?.split(',')[0]?.trim(),
-      );
+      // The query may name a masjid or a town, so try both and prefer the
+      // masjid only when its name is what was asked for.
+      const [namedResult, placeResult] = await Promise.allSettled([
+        searchMosquesByName(
+          query.trim(),
+          searchOrigin,
+          activeLocation?.label?.split(',')[0]?.trim(),
+        ),
+        geocodeAddressOrCity(query.trim()),
+      ]);
       if (requestId !== loadRequestRef.current) return;
+      const namedMosques =
+        namedResult.status === 'fulfilled' ? namedResult.value : [];
+      const place =
+        placeResult.status === 'fulfilled' ? placeResult.value : null;
+      const namedTheMasjid =
+        namedMosques.length && queryNamesMosque(query, namedMosques[0].name);
+
+      if (place && !namedTheMasjid) {
+        const townLabel = place.label.split(',')[0]?.trim() || place.label;
+        const searchedTown: CachedSearchedLocation = {
+          coordinates: { latitude: place.latitude, longitude: place.longitude },
+          label: townLabel,
+          address: place.address ?? place.label,
+        };
+        setQuery(townLabel);
+        setShowsUserLocation(false);
+        setSearchedLocation(searchedTown);
+        setShowAllSearchResults(true);
+        await loadForOrigin(
+          { latitude: place.latitude, longitude: place.longitude },
+          `Masjids in ${townLabel}`,
+          30000,
+          true,
+          { cacheLabel: townLabel, searchedLocation: searchedTown },
+        );
+        return;
+      }
       if (!namedMosques.length) {
         setSearchError(`No Apple Maps result found for “${query.trim()}”.`);
-        setMessage('Try the mosque’s full name or move the map closer');
+        setMessage('Try the mosque’s full name or a town');
         return;
       }
       const firstMatch = namedMosques[0];
