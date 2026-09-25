@@ -124,6 +124,38 @@ describe('timetable tables', () => {
     });
   });
 
+  it('reads a list that names each prayer beside its time', () => {
+    // A front page that lists today's times as a list, with sunrise among
+    // them, is publishing the times the prayers begin at.
+    const schedule = parsePublishedMosqueWebsiteHTML(
+      `<table><tr><td><ul>
+         <li><a href="#">Fajr</a></li><li><a href="#">5:16 AM</a></li>
+         <li><a href="#">Sunrise</a></li><li><a href="#">7:01 AM</a></li>
+         <li><a href="#">Zuhr</a></li><li><a href="#">1:14 PM</a></li>
+         <li><a href="#">Asr</a></li><li><a href="#">5:10 PM</a></li>
+         <li><a href="#">Maghrib</a></li><li><a href="#">7:09 PM</a></li>
+         <li><a href="#">Isha</a></li><li><a href="#"> 8:32 PM</a></li>
+       </ul></td></tr></table>`,
+      {
+        id: 'x',
+        name: 'BC Muslim Association',
+        address: 'Richmond BC',
+        latitude: 49.1666,
+        longitude: -123.1336,
+        distanceKm: 0,
+      },
+    );
+    expect(schedule.adhan).toEqual({
+      Fajr: '05:16 AM',
+      Dhuhr: '01:14 PM',
+      Asr: '05:10 PM',
+      Maghrib: '07:09 PM',
+      Isha: '08:32 PM',
+    });
+    // Sunrise is not a prayer, so it must not become Fajr's jama'ah.
+    expect(schedule.iqamah).toEqual({});
+  });
+
   it('reads a late-morning Dhuhr without AM/PM as morning', () => {
     const schedule = parsePublishedMosqueWebsiteHTML(
       '<div>Subuh 04:35</div><div>Zuhur 11:53</div><div>Ashar 15:14</div><div>Maghrib 17:47</div><div>Isya 18:59</div>',

@@ -765,6 +765,10 @@ const websiteJummahAliases = normalizedJummahAliasValues
 
 const websiteTimePattern =
   /(?:(?:上午|下午|午前|午後)\s*)?(?:[01]?\d|2[0-3])[:.][0-5]\d\s*(?:a\.?\s*m\.?|p\.?\s*m\.?|[صم]|上午|下午|午前|午後)?/gi;
+/** Sunrise is published beside the prayers but is never prayed in congregation. */
+const websiteSunriseWords =
+  /sunrise|shuruq|shurooq|shorook|chourouk|gunes|terbit|sonnenaufgang|soloppgang|salida\s+del\s+sol|lever\s+du\s+soleil|восход|شروق|طلوع/i;
+
 const websiteScheduleWords =
   /(?:(?:prayer|salah|salat)[\s_-]*(?:times?|timings?|timetable|schedule)|iqamah|jamaat|jamat|jummah|jumuah|timetable|namaz|vaktija|namaska\s+vremena|orari\s+i\s+namazit|(?:ramadan|monthly|yearly)\s+(?:prayer\s+)?schedule|horaires?\s+(?:de\s+)?priere|heures?\s+(?:de\s+)?priere|gebetszeiten|gebetsplan|tiempos?\s+de\s+oracion|horarios?\s+de\s+oracion|horarios?\s+de\s+reza|orari[oa]\s+(?:di\s+)?preghier[ae]|gebedstijden|namaz\s+(?:vakitleri|saatleri|vremena)|waktu\s+(?:solat|salat|sholat|sembahyang)|waqtiyada\s+salaadda|nyakati\s+za\s+(?:swala|sala)|молитвенн?ое?\s+время|время\s+(?:намаза|молитв)|расписание\s+(?:намаза|молитв)|مواقيت\s*(?:الصلاة|الصلاه)|اوقات\s*(?:الصلاة|الصلاه)|اوقات\s*نماز|نماز\s*کے\s*اوقات|নামাজের\s*সময়|नमाज़?\s+का\s+समय|礼拜时间|禮拜時間|祈祷时间|祈禱時間|礼拝時刻|礼拝時間|awqat-salat|namaz-sutra|tiempos-de-oracion|horaires-de-priere|orario-di-preghiera|demen-nimeje|waktu-solat|namaz-vakitleri|waktu-sholat|waqtiyada-salaadda|namaaz-ke-auqat|casy-modlitieb|namajera-samaya|imaidoket|reihai-jikan|bon-?tider|bonnetider|vremya-molitv|neram-pattiyal)/i;
 
@@ -835,6 +839,7 @@ function websitePrayerSegment(text: string, name: MasjidAyeshaPrayerName) {
           ),
         ),
       candidate.search(new RegExp(`(?:${websiteJummahAliases})`, 'i')),
+      candidate.search(websiteSunriseWords),
     ]
       .filter(index => index >= 0)
       .sort((left, right) => left - right)[0];
@@ -2062,11 +2067,7 @@ export function parseTimetableTablesForDate(
         const prayer = timetableHeaderPrayer(cell);
         if (prayer) column.prayer = prayer;
         else if (/imsak|imsaak|امساک|امساك/i.test(cell)) column.imsak = true;
-        if (
-          /sunrise|shuruq|shurooq|chourouk|gunes|terbit|sonnenaufgang|شروق/i.test(
-            cell,
-          )
-        ) {
+        if (websiteSunriseWords.test(cell)) {
           column.prayer = undefined;
           column.imsak = false;
         }
@@ -2148,12 +2149,111 @@ export function parseTimetableTablesForDate(
   return bestCount >= 3 ? best : null;
 }
 
+/** Words a label may carry beside the prayer's own name. */
+const labelledPrayerWords =
+  /prayer|salah|salat|namaz|times?|timings?|begins?|starts?|adhan|athan|azan|ezan|iqa+ma|iqaamah|jama+t|jama+h|jamaah|congregation/gi;
+
+/**
+ * Reads a label followed by its own time, the way a front page lists today's
+ * prayers as a list or a grid. The timetable reader cannot see these because
+ * there are no column headers to name the prayers.
+ */
+export function parseLabelledPrayerTimes(
+  text: string,
+): Pick<PublishedMosquePrayerSchedule, 'adhan' | 'iqamah'> | null {
+  const lines = text
+    .split(/\n|\|/)
+    .map(line => line.replace(/[\s:·•\-–—]+$/, '').trim())
+    .filter(Boolean);
+
+  /** The time a line holds, when the line holds nothing else. */
+  const onlyTime = (line: string) => {
+    const matches = [...line.matchAll(websiteTimePattern)];
+    if (matches.length !== 1) return '';
+    const rest = line.replace(matches[0][0], ' ');
+    return /[\p{L}\p{N}]/u.test(rest) ? '' : matches[0][0];
+  };
+
+  /** The prayer a line names, when the line names nothing else. */
+  const onlyLabel = (line: string) => {
+    if (line.length > 40) return undefined;
+    const value = normalizeLocalizedWebsiteText(line);
+    const sunrise = websiteSunriseWords.test(value);
+    const prayer = sunrise ? undefined : timetableHeaderPrayer(line);
+    if (!prayer && !sunrise) return undefined;
+    const remainder = value
+      .replace(
+        prayer ? new RegExp(`(?:${websitePrayerAliases[prayer]})`, 'gi') : '',
+        ' ',
+      )
+      .replace(sunrise ? websiteSunriseWords : '', ' ')
+      .replace(labelledPrayerWords, ' ')
+      .replace(/[^\p{L}]+/gu, '');
+    if (remainder) return undefined;
+    const kind = timetableIqamahWords.test(value.replace(/['’`]/g, ''))
+      ? ('iqamah' as const)
+      : timetableAdhanWords.test(value)
+      ? ('adhan' as const)
+      : undefined;
+    return { prayer, sunrise, kind };
+  };
+
+  const found: Array<{
+    prayer: MasjidAyeshaPrayerName;
+    kind?: 'adhan' | 'iqamah';
+    times: string[];
+  }> = [];
+  let sunrisePublished = false;
+  for (const [index, line] of lines.entries()) {
+    const label = onlyLabel(line);
+    if (!label) continue;
+    // A prayer may be followed by both the time it begins and its jama'ah.
+    const times: string[] = [];
+    for (let next = index + 1; next < lines.length; next += 1) {
+      const time = onlyTime(lines[next]);
+      if (!time) break;
+      times.push(time);
+    }
+    if (!times.length) continue;
+    if (!label.prayer) {
+      sunrisePublished = true;
+      continue;
+    }
+    found.push({ prayer: label.prayer, kind: label.kind, times });
+  }
+
+  const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
+  const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {};
+  for (const entry of found) {
+    const put = (kind: 'adhan' | 'iqamah', value: string) => {
+      const times = kind === 'adhan' ? adhan : iqamah;
+      if (times[entry.prayer]) return;
+      const time = normalizeWebsiteTime(value, entry.prayer);
+      if (time) times[entry.prayer] = time;
+    };
+    if (entry.times.length >= 2 && entry.kind !== 'iqamah') {
+      put('adhan', entry.times[0]);
+      put('iqamah', entry.times[1]);
+      continue;
+    }
+    // A list that publishes sunrise is listing the times prayers begin at;
+    // one that does not is far likelier to be the jama'ah times.
+    put(entry.kind ?? (sunrisePublished ? 'adhan' : 'iqamah'), entry.times[0]);
+  }
+
+  const covered = masjidAyeshaPrayerNames.filter(
+    name => adhan[name] || iqamah[name],
+  ).length;
+  return covered >= 3 ? { adhan, iqamah } : null;
+}
+
 export function parsePublishedMosqueWebsiteHTML(
   html: string,
   mosque: Mosque,
 ): PublishedMosquePrayerSchedule {
   const text = websiteHtmlToText(html);
-  const table = parseTimetableTablesForDate(html);
+  const table =
+    parseTimetableTablesForDate(html) ?? parseLabelledPrayerTimes(text);
   const adhan: PublishedMosquePrayerSchedule['adhan'] = { ...table?.adhan };
   const iqamah: PublishedMosquePrayerSchedule['iqamah'] = {
     ...table?.iqamah,
