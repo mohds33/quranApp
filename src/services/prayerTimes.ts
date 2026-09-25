@@ -325,12 +325,17 @@ function normalizeLocalizedWebsiteText(value: string) {
  * "12:30:45", so a published date is never read as a prayer time.
  */
 function withoutTimestamps(value: string) {
-  return value
-    .replace(
-      /\d{4}-\d{1,2}-\d{1,2}[t\s]?\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:z|[+-]\d{2}:?\d{2})?/gi,
-      ' ',
-    )
-    .replace(/\d{1,2}:\d{2}:\d{2}/g, ' ');
+  return (
+    value
+      .replace(
+        /\d{4}-\d{1,2}-\d{1,2}[t\s]?\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:z|[+-]\d{2}:?\d{2})?/gi,
+        ' ',
+      )
+      // A time with seconds and a meridiem is a published time rather than a
+      // machine timestamp, so keep it and drop only its seconds.
+      .replace(/(\d{1,2}:\d{2}):\d{2}(\s*[ap]\.?\s*m\.?\b)/gi, '$1$2')
+      .replace(/\d{1,2}:\d{2}:\d{2}/g, ' ')
+  );
 }
 
 function websiteHtmlToText(html: string) {

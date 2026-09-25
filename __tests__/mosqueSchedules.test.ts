@@ -193,6 +193,29 @@ describe('timetable tables', () => {
     });
   });
 
+  it('reads a Friday time published with seconds', () => {
+    const schedule = parsePublishedMosqueWebsiteHTML(
+      `<table>
+         <tr><th>SALAT</th><th>STARTS</th><th>IQAMA</th></tr>
+         <tr><td>Fajr</td><td>5:16 AM</td><td>6:10 AM</td></tr>
+         <tr><td>Dhur</td><td>1:14 PM</td><td>1:40 PM</td></tr>
+         <tr><td>Asr</td><td>5:10 PM</td><td>5:30 PM</td></tr>
+         <tr><td>Magreb</td><td>7:13 PM</td><td>7:13 PM</td></tr>
+         <tr><td>Isha</td><td>8:32 PM</td><td>8:32 PM</td></tr>
+         <tr><td>Jummah</td><td>1:30:00 PM</td><td>2:00:00 PM</td></tr>
+       </table>`,
+      {
+        id: 'x',
+        name: 'The BC Muslim Association',
+        address: 'Vancouver BC',
+        latitude: 49.28,
+        longitude: -123.04,
+        distanceKm: 0,
+      },
+    );
+    expect(schedule.jummah).toEqual(['01:30 PM', '02:00 PM']);
+  });
+
   it('reads Dhuhr where a masjid spells it Dhur', () => {
     const schedule = parsePublishedMosqueWebsiteHTML(
       `<table>
