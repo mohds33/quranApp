@@ -193,6 +193,31 @@ describe('timetable tables', () => {
     });
   });
 
+  it('reads Dhuhr where a masjid spells it Dhur', () => {
+    const schedule = parsePublishedMosqueWebsiteHTML(
+      `<table>
+         <tr><th>SALAT</th><th>STARTS</th><th>IQAMA</th></tr>
+         <tr><td>Fajr</td><td>5:14 AM</td><td>5:45 AM</td></tr>
+         <tr><td>Sunrise</td><td>6:59 AM</td><td></td></tr>
+         <tr><td>Dhur</td><td>1:03 PM</td><td>1:45 PM</td></tr>
+         <tr><td>Asr</td><td>4:21 PM</td><td>5:15 PM</td></tr>
+         <tr><td>Magreb</td><td>7:06 PM</td><td>7:11 PM</td></tr>
+         <tr><td>Isha</td><td>8:45 PM</td><td>9:15 PM</td></tr>
+       </table>`,
+      {
+        id: 'x',
+        name: 'The BC Muslim Association',
+        address: 'Vancouver BC',
+        latitude: 49.25,
+        longitude: -123.04,
+        distanceKm: 0,
+      },
+    );
+    expect(schedule.adhan.Dhuhr).toBe('01:03 PM');
+    expect(schedule.iqamah.Dhuhr).toBe('01:45 PM');
+    expect(schedule.adhan.Maghrib).toBe('07:06 PM');
+  });
+
   it('reads a late-morning Dhuhr without AM/PM as morning', () => {
     const schedule = parsePublishedMosqueWebsiteHTML(
       '<div>Subuh 04:35</div><div>Zuhur 11:53</div><div>Ashar 15:14</div><div>Maghrib 17:47</div><div>Isya 18:59</div>',
