@@ -1556,6 +1556,46 @@ export function extractWebsiteScriptLinks(html: string, sourceUrl: string) {
   return scripts.slice(0, 4);
 }
 
+/** Frames that carry something other than a timetable. */
+const unrelatedFrameHost =
+  /(?:youtube|youtu\.be|vimeo|soundcloud|spotify|facebook|instagram|twitter|x\.com|tiktok|google\.com\/maps|maps\.google|recaptcha|gstatic|doubleclick|googletagmanager|google-analytics|paypal|stripe|donorbox|givebutter|launchgood|zeffy|calendly)/i;
+
+/**
+ * Every frame a rendered page draws its content in. A site built on a page
+ * builder often keeps its timetable in an embedded document of its own, so
+ * the page that names the masjid holds only the frame that shows the times.
+ */
+export function embeddedFrameUrls(html: string, sourceUrl: string) {
+  const frames: string[] = [];
+  let base: URL;
+  try {
+    base = new URL(sourceUrl);
+  } catch {
+    return frames;
+  }
+  for (const match of html.matchAll(
+    /<iframe\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi,
+  )) {
+    const rawSrc = (match[1] ?? match[2] ?? match[3] ?? '')
+      .replace(/&amp;/gi, '&')
+      .trim();
+    if (!rawSrc) continue;
+    try {
+      const resolved = new URL(rawSrc, base);
+      if (
+        /^https?:$/.test(resolved.protocol) &&
+        !unrelatedFrameHost.test(resolved.href) &&
+        !frames.includes(resolved.href)
+      ) {
+        frames.push(resolved.href);
+      }
+    } catch {
+      // Ignore malformed frame sources.
+    }
+  }
+  return frames;
+}
+
 export function extractPrayerScheduleLinks(html: string, sourceUrl: string) {
   const links: string[] = [];
   const anchors =
@@ -2202,6 +2242,7 @@ export function parseLabelledPrayerTimes(
     prayer: MasjidAyeshaPrayerName;
     kind?: 'adhan' | 'iqamah';
     times: string[];
+    offset?: number;
   }> = [];
   let sunrisePublished = false;
   for (const [index, line] of lines.entries()) {
@@ -2219,7 +2260,16 @@ export function parseLabelledPrayerTimes(
       sunrisePublished = true;
       continue;
     }
-    found.push({ prayer: label.prayer, kind: label.kind, times });
+    // A jama'ah is often written as an offset from the time the prayer began.
+    const offset = (lines[index + 1 + times.length] ?? '').match(
+      /^(?:[\p{L}]+\s*)?\+\s*(\d{1,3})\s*(?:min(?:ute)?s?)?$/iu,
+    );
+    found.push({
+      prayer: label.prayer,
+      kind: label.kind,
+      times,
+      offset: offset ? Number(offset[1]) : undefined,
+    });
   }
 
   const adhan: PublishedMosquePrayerSchedule['adhan'] = {};
@@ -2234,6 +2284,13 @@ export function parseLabelledPrayerTimes(
     if (entry.times.length >= 2 && entry.kind !== 'iqamah') {
       put('adhan', entry.times[0]);
       put('iqamah', entry.times[1]);
+      continue;
+    }
+    if (entry.offset !== undefined && entry.kind !== 'iqamah') {
+      put('adhan', entry.times[0]);
+      const started = adhan[entry.prayer];
+      if (started)
+        put('iqamah', addMinutesToDisplayTime(started, entry.offset));
       continue;
     }
     // A list that publishes sunrise is listing the times prayers begin at;
@@ -3560,13 +3617,23 @@ async function fetchOfficialMosqueWebsiteSchedule(
   if (!schedules.length && Platform.OS === 'ios' && NativeAppleMapsSearch) {
     // Some sites draw their timetable only once a browser runs the page, and
     // often on a separate timings page rather than the front page.
-    const renderable = [resolvedSourceUrl, ...linkedScheduleLinks.slice(0, 2)];
-    for (const pageUrl of renderable) {
+    const renderable: Array<{ url: string; framed: boolean }> = [
+      resolvedSourceUrl,
+      ...linkedScheduleLinks.slice(0, 2),
+    ].map(url => ({ url, framed: false }));
+    const alreadyRendered = new Set<string>();
+    for (let index = 0; index < renderable.length && index < 6; index += 1) {
+      const { url: pageUrl, framed } = renderable[index];
       if (schedules.length) break;
+      if (alreadyRendered.has(pageUrl)) continue;
+      alreadyRendered.add(pageUrl);
       try {
         const renderedHTML =
           await NativeAppleMapsSearch.extractRenderedWebsiteHTML(pageUrl);
         if (
+          // A frame is reached only from a page that already named the
+          // masjid, and need not name it again.
+          !framed &&
           !websiteMatchesSelectedMosque(renderedHTML, mosque) &&
           !(
             allowLocationIdentity &&
@@ -3592,6 +3659,14 @@ async function fetchOfficialMosqueWebsiteSchedule(
             );
           } catch {
             // Ignore unrelated rendered application state.
+          }
+        }
+        if (!schedules.length && !framed) {
+          for (const frame of embeddedFrameUrls(renderedHTML, pageUrl).slice(
+            0,
+            2,
+          )) {
+            renderable.push({ url: frame, framed: true });
           }
         }
       } catch {

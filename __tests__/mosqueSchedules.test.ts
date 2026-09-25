@@ -156,6 +156,43 @@ describe('timetable tables', () => {
     expect(schedule.iqamah).toEqual({});
   });
 
+  it("reads a table of prayer rows and resolves an offset jama'ah", () => {
+    // A row per prayer, rather than a column, with the jama'ah of the last two
+    // written as an offset from the time the prayer begins.
+    const schedule = parsePublishedMosqueWebsiteHTML(
+      `<table><thead><tr><th>Prayer</th><th>Athan</th><th>Iqamah</th><th>Next Sunday</th></tr></thead><tbody>
+         <tr><td>Fajr</td><td>5:56 AM</td><td>6:20 AM</td><td>6:30 AM</td></tr>
+         <tr><td>Sunrise</td><td>7:26 AM</td><td>..</td><td>..</td></tr>
+         <tr><td>Dhuhr</td><td>1:28 PM</td><td>2:00 PM</td><td>2:00 PM</td></tr>
+         <tr><td>Asr</td><td>4:44 PM</td><td>5:15 PM</td><td>5:00 PM</td></tr>
+         <tr><td>Maghrib</td><td>7:30 PM</td><td>+10 min</td><td>+10 min</td></tr>
+         <tr><td>Isha</td><td>9:00 PM</td><td>Isha+ 10 min</td><td>Isha+ 10 min</td></tr>
+       </tbody></table>`,
+      {
+        id: 'x',
+        name: 'Islamic Information Society of Calgary',
+        address: 'Calgary AB',
+        latitude: 51.0447,
+        longitude: -114.0719,
+        distanceKm: 0,
+      },
+    );
+    expect(schedule.adhan).toEqual({
+      Fajr: '05:56 AM',
+      Dhuhr: '01:28 PM',
+      Asr: '04:44 PM',
+      Maghrib: '07:30 PM',
+      Isha: '09:00 PM',
+    });
+    expect(schedule.iqamah).toEqual({
+      Fajr: '06:20 AM',
+      Dhuhr: '02:00 PM',
+      Asr: '05:15 PM',
+      Maghrib: '07:40 PM',
+      Isha: '09:10 PM',
+    });
+  });
+
   it('reads a late-morning Dhuhr without AM/PM as morning', () => {
     const schedule = parsePublishedMosqueWebsiteHTML(
       '<div>Subuh 04:35</div><div>Zuhur 11:53</div><div>Ashar 15:14</div><div>Maghrib 17:47</div><div>Isya 18:59</div>',
